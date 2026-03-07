@@ -1,5 +1,7 @@
 # Spectremon: Spec-Driven Development Framework
 
+![Spectremon](./spectremon.png)
+
 Spectremon is an on-demand, multi-agent orchestration framework for Claude Code. It enforces a rigorous Spec-Driven Development (SDD) lifecycle by coordinating an Orchestrator with three specialized subagents: Discovery, Implementer, and Architect.
 
 ## Installation
