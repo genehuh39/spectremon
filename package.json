@@ -1,0 +1,19 @@
+{
+  "name": "spectremon",
+  "version": "1.0.0",
+  "description": "Spec-Driven Development framework for Claude Code",
+  "bin": {
+    "spectremon": "./index.js"
+  },
+  "files": [
+    "index.js"
+  ],
+  "scripts": {
+    "build": "bun build ./index.ts --outfile ./index.js --target node && sed -i '' '1s|.*|#!/usr/bin/env node|' ./index.js"
+  },
+  "author": "genehuh39",
+  "license": "MIT",
+  "devDependencies": {
+    "bun-types": "latest"
+  }
+}

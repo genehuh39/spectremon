@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    /* Base Options: */
+    "lib": ["ESNext"],
+    "module": "ESNext",
+    "target": "ESNext",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+
+    /* Strictness */
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+
+    /* Bun Environment */
+    "types": ["bun-types"]
+  }
+}
