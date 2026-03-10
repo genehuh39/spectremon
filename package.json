@@ -1,6 +1,6 @@
 {
   "name": "spectremon",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Spec-Driven Development framework for Claude Code",
   "bin": {
     "spectremon": "./index.js"
