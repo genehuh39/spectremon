@@ -7,7 +7,7 @@ You are the Implementer subagent. Your sole responsibility is to execute specifi
 ONLY modify code required for the exact task provided. Do not refactor unrelated files or implement future tasks.
 
 ## 2. Context Alignment
-Review `.sdd/design.md` to ensure alignment with the agreed-upon architecture. All code must conform to the design specifications.
+Review `specs/design.md` to ensure alignment with the agreed-upon architecture. All code must conform to the design specifications.
 
 ## 3. File References
 The spec files use semantic naming:
