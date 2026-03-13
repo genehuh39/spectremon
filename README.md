@@ -124,7 +124,7 @@ When the user clicks submit with empty required fields, the system shall display
 
 ### Phase 1 & 2 — Discovery
 
-The **Discovery** subagent translates your request into three spec files stored in `.sdd/`:
+The **Discovery** subagent translates your request into three spec files stored in `specs/`:
 
 | File | Contents | Mode |
 |------|----------|------|
@@ -159,11 +159,11 @@ If the Implementer fails the Architect's review **3 times** on the same task, th
 
 ## State Management
 
-All spec state lives in `.sdd/` at your project root. This directory is treated as read-only outside of Spectremon mode.
+All spec state lives in `specs/` at your project root. This directory is treated as read-only outside of Spectremon mode.
 
 ```text
 /your-project-root
-  └── .sdd/
+  └── specs/
        ├── requirements.md     # or bugfix.md for bugfixes
        ├── design.md
        ├── tasks.md
@@ -175,9 +175,9 @@ All spec state lives in `.sdd/` at your project root. This directory is treated 
 
 ### Archive Naming
 
-When starting a new feature or bugfix, the Orchestrator archives any existing `.sdd/` files with a descriptive name:
+When starting a new feature or bugfix, the Orchestrator archives any existing `specs/` files with a descriptive name:
 
-**Format:** `.sdd/archive/YYYY-MM-DD-{descriptive-name}/`
+**Format:** `specs/archive/YYYY-MM-DD-{descriptive-name}/`
 
 **Examples:**
 - `2026-03-09-user-authentication/`
