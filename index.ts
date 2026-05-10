@@ -183,18 +183,138 @@ If the task involves building or modifying React components, you cannot rely on 
 5. **Enforce:** If the script throws an error or fails an assertion, reject the implementation. If it passes, delete \`verify_temp.tsx\` and approve the task.`
 };
 
-const claudeTrigger = `
-# CUSTOM WORKFLOWS & TRIGGERS
+const CLAUDE_MD_VERSION = "v3.0.0";
 
-## The Spectremon SDD Framework
-**The Trigger:** If I say "Start Spectremon" or "Boot up the Orchestrator":
-1. Read \`.claude/spectremon.md\`.
-2. Adopt the Persona and Execution Loop defined there.
-3. Stop acting as a standard assistant.
+function buildClaudeTrigger(): string {
+  return `# CUSTOM WORKFLOWS & TRIGGERS\n\n## Spectremon ${CLAUDE_MD_VERSION}\n` +
+    `<!-- SPECTREMON_VERSION: ${CLAUDE_MD_VERSION} -->\n\n` +
+    `## The Spectremon SDD Framework`;  // version marker in header, not just comment
+}
 
-## State Protection
-Treat the \`specs/\` directory as read-only unless Spectremon mode is active.
-`;
+// --- HELPER: detect if CLAUDE.md contains a Spectremon section ---
+function hasSpectremonSection(content: string): boolean {
+  return content.includes("<!-- SPECTREMON_VERSION:");
+}
+
+// --- HELPER: extract the Spectremon section and everything below it from CLAUDE.md ---
+function extractSpectremonBlock(content: string): string | null {
+  const marker = "<!-- SPECTREMON_VERSION:";
+  const idx = content.indexOf(marker);
+  if (idx === -1) return null;
+
+  // Find the start of this section — go back to the previous blank line or start of file
+  let sectionStart = idx;
+  while (sectionStart > 0 && content[sectionStart - 1] !== "\n") {
+    sectionStart--;
+  }
+  if (content[sectionStart - 1] === "\n" || sectionStart === 0) {
+    // section starts right after a newline or at file start
+    return content.substring(sectionStart);
+  }
+  return content.substring(sectionStart + 1);  // skip the preceding newline
+}
+
+// --- HELPER: extract non-Spectremon content (everything before Spectremon section) ---
+function extractNonSpectremonContent(content: string): string {
+  const marker = "<!-- SPECTREMON_VERSION:";
+  const idx = content.indexOf(marker);
+  if (idx === -1) return content; // no Spectremon section, entire file is non-Spectremon
+
+  let beforeEnd = idx;
+  while (beforeEnd > 0 && content[beforeEnd - 1] !== "\n") {
+    beforeEnd--;
+  }
+  if (content[beforeEnd - 1] === "\n" || beforeEnd === 0) {
+    return content.substring(0, beforeEnd);
+  }
+  return content.substring(0, beforeEnd + 1); // include the newline
+}
+
+// --- HELPER: compare Spectremon section versions ---
+function extractVersion(content: string): string | null {
+  const match = content.match(/<!-- SPECTREMON_VERSION:\s*(v[\d.]+) -->/);
+  return match ? match[1] : null;
+}
+
+// --- HELPER: idempotent CLAUDE.md update with version-aware merging ---
+function handleClaudeMdUpdate(): void {
+  const claudeMdPath = join(targetDir, "CLAUDE.md");
+
+  if (!existsSync(claudeMdPath)) {
+    // No CLAUDE.md exists — create from scratch
+    const defaultContent = `# DEFAULT BEHAVIOR\nYou are a helpful, expert coding assistant.\n${buildClaudeTrigger()}\n\n## State Protection\nTreat the \`specs/\` directory as read-only unless Spectremon mode is active.`;
+    safeWriteFile("CLAUDE.md", defaultContent);
+    console.log(`✅ Created new CLAUDE.md with Spectremon trigger`);
+    return;
+  }
+
+  try {
+    const currentContent = safeReadFile("CLAUDE.md");
+
+    // No Spectremon section — append it
+    if (!hasSpectremonSection(currentContent)) {
+      const appendedContent = `\n${buildClaudeTrigger()}\n\n## State Protection\nTreat the \`specs/\` directory as read-only unless Spectremon mode is active.`;
+      safeAppendFile("CLAUDE.md", appendedContent);
+      console.log(`✅ Appended Spectremon trigger to existing CLAUDE.md`);
+      return;
+    }
+
+    // Spectremon section exists — check versions and hash
+    const currentVersion = extractVersion(currentContent) || "unknown";
+    const expectedTrigger = buildClaudeTrigger();
+    const newHash = createHash("sha256").update(expectedTrigger).digest("hex");
+
+    // Extract the existing Spectremon section from CLAUDE.md
+    const existingSpectremonBlock = extractSpectremonBlock(currentContent);
+    if (!existingSpectremonBlock) {
+      console.log(`⚠️  Could not parse Spectremon section — appending fresh trigger`);
+      safeAppendFile("CLAUDE.md", `\n${buildClaudeTrigger()}\n\n## State Protection\nTreat the \`specs/\` directory as read-only unless Spectremon mode is active.`);
+      return;
+    }
+
+    const existingHash = createHash("sha256").update(existingSpectremonBlock).digest("hex");
+
+    if (currentVersion === CLAUDE_MD_VERSION && existingHash === newHash) {
+      // Same version and content — nothing to do
+      console.log(`⏭️  CLAUDE.md is up to date (${CLAUDE_MD_VERSION})`);
+      return;
+    }
+
+    const needsUpdate = currentVersion !== CLAUDE_MD_VERSION || existingHash !== newHash;
+
+    if (needsUpdate) {
+      // Version mismatch or content changed — replace the Spectremon section while preserving non-Spectremon content above it
+      const beforeSpectremon = extractNonSpectremonContent(currentContent);
+      let replacementBlock: string;
+      if (currentVersion !== CLAUDE_MD_VERSION) {
+        // Version upgrade — update template but preserve user's local changes to the section
+        console.log(`⚠️  Spectremon ${CLAUDE_MD_VERSION} available — updating CLAUDE.md with latest template`);
+        replacementBlock = `\n${buildClaudeTrigger()}\n\n## State Protection\nTreat the \`specs/\` directory as read-only unless Spectremon mode is active.`;
+      } else {
+        // Same version but content changed (user modified it) — preserve their changes, only update if they want to merge
+        console.log(`⚠️  CLAUDE.md local modifications detected — keeping your changes intact`);
+        return; // do nothing — user's edits are preserved
+      }
+
+      const newContent = beforeSpectremon + replacementBlock;
+      safeWriteFile("CLAUDE.md", newContent);
+      console.log(`✅ Updated Spectremon section in CLAUDE.md`);
+    } else {
+      // No update needed (edge case: version matches but hash differs due to whitespace)
+      console.log(`⏭️  CLAUDE.md is up to date (${CLAUDE_MD_VERSION})`);
+    }
+
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`   ❌ Failed to read/append CLAUDE.md: ${message}`);
+    throw new Error(
+      `Failed to update \`CLAUDE.md\`:\n${message}\n\n` +
+        "Check that the file exists and is readable, and that you have write permissions in the current directory."
+    );
+  }
+}
+
+const claudeTrigger = buildClaudeTrigger();
 
 // --- 3. EXECUTE INSTALLATION ---
 console.log("🚀 Initializing Spectremon with Bun...");
@@ -208,30 +328,8 @@ try {
     safeWriteAgentFile(filePath, content);
   }
 
-  // Handle CLAUDE.md
-  const claudeMdPath = join(targetDir, "CLAUDE.md");
-  if (existsSync(claudeMdPath)) {
-    try {
-      const currentContent = safeReadFile("CLAUDE.md");
-      if (!currentContent.includes("The Spectremon SDD Framework")) {
-        safeAppendFile("CLAUDE.md", `\n${claudeTrigger}`);
-        console.log(`✅ Appended Spectremon trigger to existing CLAUDE.md`);
-      } else {
-        console.log(`⚠️  CLAUDE.md already contains the Spectremon SDD Framework trigger — skipping append.`);
-      }
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error(`   ❌ Failed to read/append CLAUDE.md: ${message}`);
-      throw new Error(
-        `Failed to update \`CLAUDE.md\`:\n${message}\n\n` +
-          "Check that the file exists and is readable, and that you have write permissions in the current directory."
-      );
-    }
-  } else {
-    const defaultClaude = `# DEFAULT BEHAVIOR\nYou are a helpful, expert coding assistant.\n${claudeTrigger}`;
-    safeWriteFile("CLAUDE.md", defaultClaude);
-    console.log(`✅ Created new CLAUDE.md with Spectremon trigger`);
-  }
+  // Handle CLAUDE.md (version-aware idempotent update)
+  handleClaudeMdUpdate();
 
   console.log("\n✨ Spectremon installation complete!");
 
