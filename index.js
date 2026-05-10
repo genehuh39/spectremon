@@ -3,8 +3,64 @@
 
 // index.ts
 import { existsSync, mkdirSync, writeFileSync, readFileSync, appendFileSync } from "fs";
-import { join, relative } from "path";
+import { dirname, join, relative } from "path";
 var targetDir = process.cwd();
+function safeMkdir(dir) {
+  try {
+    if (existsSync(dir))
+      return;
+    mkdirSync(dir, { recursive: true });
+    console.log(`\u2705 Created directory: ${relative(targetDir, dir)}`);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`   \u274C Failed to create directory: ${relative(targetDir, dir)}`);
+    throw new Error(`Failed to create directory \`${relative(targetDir, dir)}\`:
+${message}
+
+` + "Check that you have write permissions in the parent directory and sufficient disk space.");
+  }
+}
+function safeWriteFile(filePath, content) {
+  try {
+    const fullDir = join(targetDir, dirname(filePath));
+    if (!existsSync(fullDir)) {
+      mkdirSync(fullDir, { recursive: true });
+      console.log(`   \u2192 Created parent directory: ${relative(targetDir, fullDir)}`);
+    }
+    writeFileSync(join(targetDir, filePath), content, "utf8");
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`   \u274C Failed to create ${filePath}: ${message}`);
+    throw new Error(`Failed to write \`${filePath}\`:
+${message}
+
+` + "Check that you have write permissions in the current directory and sufficient disk space.");
+  }
+}
+function safeAppendFile(filePath, content) {
+  try {
+    appendFileSync(join(targetDir, filePath), content, "utf8");
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`   \u274C Failed to update ${filePath}: ${message}`);
+    throw new Error(`Failed to append to \`${filePath}\`:
+${message}
+
+` + "Check that you have write permissions in the current directory and sufficient disk space.");
+  }
+}
+function safeReadFile(filePath) {
+  try {
+    return readFileSync(join(targetDir, filePath), "utf8");
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`   \u274C Failed to read ${filePath}: ${message}`);
+    throw new Error(`Failed to read \`${filePath}\`:
+${message}
+
+` + "Check that the file exists and is readable.");
+  }
+}
 var dirs = [
   join(targetDir, ".claude"),
   join(targetDir, ".claude", "agents")
@@ -82,31 +138,44 @@ var claudeTrigger = `
 Treat the \`specs/\` directory as read-only unless Spectremon mode is active.
 `;
 console.log("\uD83D\uDE80 Initializing Spectremon with Bun...");
-dirs.forEach((dir) => {
-  if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true });
-    console.log(`\u2705 Created directory: ${relative(targetDir, dir)}`);
+try {
+  dirs.forEach((dir) => safeMkdir(dir));
+  for (const [filePath, content] of Object.entries(files)) {
+    safeWriteFile(filePath, content);
+    console.log(`\u2705 Created file: ${filePath}`);
   }
-});
-for (const [filePath, content] of Object.entries(files)) {
-  const fullPath = join(targetDir, filePath);
-  writeFileSync(fullPath, content, "utf8");
-  console.log(`\u2705 Created file: ${filePath}`);
-}
-var claudeMdPath = join(targetDir, "CLAUDE.md");
-if (existsSync(claudeMdPath)) {
-  const currentContent = readFileSync(claudeMdPath, "utf8");
-  if (!currentContent.includes("The Spectremon SDD Framework")) {
-    appendFileSync(claudeMdPath, `
-${claudeTrigger}`, "utf8");
-    console.log(`\u2705 Appended Spectremon trigger to existing CLAUDE.md`);
-  }
-} else {
-  const defaultClaude = `# DEFAULT BEHAVIOR
+  const claudeMdPath = join(targetDir, "CLAUDE.md");
+  if (existsSync(claudeMdPath)) {
+    try {
+      const currentContent = safeReadFile("CLAUDE.md");
+      if (!currentContent.includes("The Spectremon SDD Framework")) {
+        safeAppendFile("CLAUDE.md", `
+${claudeTrigger}`);
+        console.log(`\u2705 Appended Spectremon trigger to existing CLAUDE.md`);
+      } else {
+        console.log(`\u26A0\uFE0F  CLAUDE.md already contains the Spectremon SDD Framework trigger \u2014 skipping append.`);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`   \u274C Failed to read/append CLAUDE.md: ${message}`);
+      throw new Error(`Failed to update \`CLAUDE.md\`:
+${message}
+
+` + "Check that the file exists and is readable, and that you have write permissions in the current directory.");
+    }
+  } else {
+    const defaultClaude = `# DEFAULT BEHAVIOR
 You are a helpful, expert coding assistant.
 ${claudeTrigger}`;
-  writeFileSync(claudeMdPath, defaultClaude, "utf8");
-  console.log(`\u2705 Created new CLAUDE.md with Spectremon trigger`);
-}
-console.log(`
+    safeWriteFile("CLAUDE.md", defaultClaude);
+    console.log(`\u2705 Created new CLAUDE.md with Spectremon trigger`);
+  }
+  console.log(`
 \u2728 Spectremon installation complete!`);
+} catch (err) {
+  const message = err instanceof Error ? err.message : String(err);
+  console.error("");
+  console.error(`\u274C Spectremon initialization failed. Please try again or check for issues.
+`);
+  process.exit(1);
+}
