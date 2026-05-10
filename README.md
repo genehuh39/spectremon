@@ -184,7 +184,7 @@ When starting a new feature or bugfix, the Orchestrator archives any existing `s
 - `2026-03-08-payment-webhook-timeout-fix/`
 - `2026-03-07-dashboard-admin-filtering/`
 
-The name is auto-extracted from your request and confirmed with you before archiving.
+The name is auto-extracted from your request and confirmed with you before archiving. **Path traversal is protected against**: archive names are sanitized to only contain lowercase alphanumeric characters, hyphens, and underscores — no directory separators or `..` sequences can escape the project root.
 
 ## Best Practices
 

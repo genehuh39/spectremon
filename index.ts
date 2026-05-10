@@ -1,9 +1,209 @@
 #!/usr/bin/env bun
 
-import { existsSync, mkdirSync, writeFileSync, readFileSync, appendFileSync } from "node:fs";
-import { join, relative } from "node:path";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { dirname, join, relative } from "node:path";
 
 const targetDir = process.cwd();
+const CLAUDE_MD_VERSION = "v3.0.0";
+const SPECTREMON_SECTION_START = "# CUSTOM WORKFLOWS & TRIGGERS";
+const SPECTREMON_SECTION_END = "Treat the `specs/` directory as read-only unless Spectremon mode is active.";
+const LEGACY_SPECTREMON_HEADING = "## The Spectremon SDD Framework";
+
+function hashContent(content: string): string {
+  return createHash("sha256").update(content.trim()).digest("hex");
+}
+
+// --- HELPER: safe directory creation ---
+function safeMkdir(dir: string): void {
+  try {
+    if (existsSync(dir)) return;
+    mkdirSync(dir, { recursive: true });
+    console.log(`✅ Created directory: ${relative(targetDir, dir)}`);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`   ❌ Failed to create directory: ${relative(targetDir, dir)}`);
+    throw new Error(
+      `Failed to create directory \`${relative(targetDir, dir)}\`:\n${message}\n\n` +
+        "Check that you have write permissions in the parent directory and sufficient disk space."
+    );
+  }
+}
+
+function safeWriteFile(filePath: string, content: string): void {
+  try {
+    const fullDir = join(targetDir, dirname(filePath));
+    if (!existsSync(fullDir)) {
+      mkdirSync(fullDir, { recursive: true });
+      console.log(`   → Created parent directory: ${relative(targetDir, fullDir)}`);
+    }
+    writeFileSync(join(targetDir, filePath), content, "utf8");
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`   ❌ Failed to write ${filePath}: ${message}`);
+    throw new Error(
+      `Failed to write \`${filePath}\`:\n${message}\n\n` +
+        "Check that you have write permissions in the current directory and sufficient disk space."
+    );
+  }
+}
+
+function safeAppendFile(filePath: string, content: string): void {
+  try {
+    appendFileSync(join(targetDir, filePath), content, "utf8");
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`   ❌ Failed to update ${filePath}: ${message}`);
+    throw new Error(
+      `Failed to append to \`${filePath}\`:\n${message}\n\n` +
+        "Check that you have write permissions in the current directory and sufficient disk space."
+    );
+  }
+}
+
+function safeReadFile(filePath: string): string {
+  try {
+    return readFileSync(join(targetDir, filePath), "utf8");
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`   ❌ Failed to read ${filePath}: ${message}`);
+    throw new Error(
+      `Failed to read \`${filePath}\`:\n${message}\n\n` +
+        "Check that the file exists and is readable."
+    );
+  }
+}
+
+// --- HELPER: preserve user-modified agent files ---
+function safeWriteAgentFile(filePath: string, content: string): void {
+  const fullPath = join(targetDir, filePath);
+
+  if (!existsSync(fullPath)) {
+    safeWriteFile(filePath, content);
+    console.log(`✅ Created file: ${filePath}`);
+    return;
+  }
+
+  const existingContent = safeReadFile(filePath);
+  if (hashContent(existingContent) === hashContent(content)) {
+    console.log(`⏭️  Skipped ${filePath} — file is up to date`);
+    return;
+  }
+
+  console.log(`⚠️  ${filePath} has local modifications — keeping existing file intact`);
+}
+
+function buildClaudeSection(): string {
+  return `${SPECTREMON_SECTION_START}
+
+## Spectremon ${CLAUDE_MD_VERSION}
+<!-- SPECTREMON_VERSION: ${CLAUDE_MD_VERSION} -->
+
+## The Spectremon SDD Framework
+**The Trigger:** If I say "Start Spectremon" or "Boot up the Orchestrator":
+1. Read \`.claude/spectremon.md\`.
+2. Adopt the Persona and Execution Loop defined there.
+3. Stop acting as a standard assistant.
+
+## State Protection
+${SPECTREMON_SECTION_END}`;
+}
+
+function buildDefaultClaudeMd(): string {
+  return `# DEFAULT BEHAVIOR
+You are a helpful, expert coding assistant.
+
+${buildClaudeSection()}
+`;
+}
+
+function extractVersion(content: string): string | null {
+  const match = content.match(/<!-- SPECTREMON_VERSION:\s*(v[\d.]+) -->/);
+  return match ? match[1] : null;
+}
+
+type SpectremonSectionRange = {
+  start: number;
+  end: number;
+  section: string;
+};
+
+function findSpectremonSectionRange(content: string): SpectremonSectionRange | null {
+  let start = content.indexOf(SPECTREMON_SECTION_START);
+
+  if (start === -1) {
+    const legacyHeadingIndex = content.indexOf(LEGACY_SPECTREMON_HEADING);
+    if (legacyHeadingIndex === -1) return null;
+    start = legacyHeadingIndex;
+  }
+
+  const endMarkerIndex = content.indexOf(SPECTREMON_SECTION_END, start);
+  if (endMarkerIndex === -1) {
+    return {
+      start,
+      end: content.length,
+      section: content.slice(start)
+    };
+  }
+
+  let end = endMarkerIndex + SPECTREMON_SECTION_END.length;
+  while (end < content.length && content[end] === "\n") {
+    end += 1;
+  }
+
+  return {
+    start,
+    end,
+    section: content.slice(start, end)
+  };
+}
+
+function joinClaudeMdParts(parts: string[]): string {
+  return `${parts.filter(Boolean).map(part => part.trim()).join("\n\n")}\n`;
+}
+
+function handleClaudeMdUpdate(): void {
+  const expectedSection = buildClaudeSection();
+  const claudeMdPath = join(targetDir, "CLAUDE.md");
+
+  if (!existsSync(claudeMdPath)) {
+    safeWriteFile("CLAUDE.md", buildDefaultClaudeMd());
+    console.log("✅ Created new CLAUDE.md with Spectremon trigger");
+    return;
+  }
+
+  const currentContent = safeReadFile("CLAUDE.md");
+  const existingRange = findSpectremonSectionRange(currentContent);
+
+  if (!existingRange) {
+    const separator = currentContent.endsWith("\n\n") ? "" : currentContent.endsWith("\n") ? "\n" : "\n\n";
+    safeAppendFile("CLAUDE.md", `${separator}${expectedSection}\n`);
+    console.log("✅ Appended Spectremon trigger to existing CLAUDE.md");
+    return;
+  }
+
+  if (hashContent(existingRange.section) === hashContent(expectedSection)) {
+    console.log(`⏭️  CLAUDE.md is up to date (${CLAUDE_MD_VERSION})`);
+    return;
+  }
+
+  const currentVersion = extractVersion(existingRange.section);
+  if (currentVersion !== CLAUDE_MD_VERSION) {
+    const beforeSection = currentContent.slice(0, existingRange.start);
+    const afterSection = currentContent.slice(existingRange.end);
+    const nextContent = joinClaudeMdParts([beforeSection, expectedSection, afterSection]);
+    safeWriteFile("CLAUDE.md", nextContent);
+
+    if (currentVersion) {
+      console.log(`✅ Updated Spectremon section in CLAUDE.md (${currentVersion} → ${CLAUDE_MD_VERSION})`);
+    } else {
+      console.log("✅ Migrated legacy Spectremon section in CLAUDE.md");
+    }
+    return;
+  }
+
+  console.log("⚠️  CLAUDE.md local modifications detected — keeping your changes intact");
+}
 
 // --- 1. DEFINE DIRECTORIES ---
 const dirs = [
@@ -43,11 +243,174 @@ Your source of truth is the \`specs/\` directory. On every new invocation, read 
   ".claude/agents/discovery.md": `# ROLE AND PURPOSE
 You are the Discovery Subagent. Translate raw user intent into a rigorous Spec-Driven Development (SDD) foundation. You own Phase 1 and 2. You DO NOT write implementation code.
 
+# MODE DETECTION
+Determine the spec type automatically AND allow explicit override:
+
+## Automatic Detection
+Scan the user's request for keywords:
+- **BUGFIX mode triggers**: "bug", "fix", "issue", "error", "broken", "crash", "not working", "fails", "exception", "regression"
+- **FEATURE mode**: Default when no bugfix keywords found
+
+## Explicit Override
+User can force mode by prefixing their request:
+- \`/bugfix\` - Forces bugfix mode regardless of content
+- \`/feature\` - Forces feature mode regardless of content
+
+## Mode Determination Flow
+1. Check for explicit prefix (\`/bugfix\` or \`/feature\`)
+2. If no prefix, scan for bugfix keywords
+3. Present detected mode to user: "Detected BUGFIX mode for 'login crash issue'. Correct? (yes/no/switch to feature)"
+4. Wait for user confirmation before proceeding
+
+# EARS NOTATION
+All requirements MUST be written in Easy Approach to Requirements Syntax (EARS):
+
+## Syntax Patterns
+- **When** [trigger/event], the system shall [system response]
+- **While** [condition/state], the system shall [ongoing behavior]
+- **If** [condition], then the system shall [action]
+- **Where** [context/location], the system shall [behavior]
+
+## Examples
+- When the user submits valid credentials, the system shall authenticate the user within 2 seconds
+- While the user session is active, the system shall refresh the authentication token every 15 minutes
+- If the API returns a 401 error, then the system shall redirect to the login page
+- Where the user has admin privileges, the system shall display the admin dashboard
+
+## Best Practices
+- Use "shall" for mandatory requirements
+- Be specific about triggers, conditions, and responses
+- Include quantifiable criteria when possible (time, count, etc.)
+- One requirement per line/statement
+
+# FEATURE NAME EXTRACTION
+Extract a descriptive, URL-friendly name from the request:
+
+## Extraction Rules
+1. From the main feature title or first requirement summary
+2. Convert to lowercase
+3. Replace spaces with hyphens
+4. Remove special characters except hyphens
+5. **Security sanitization**: Strip \`..\` sequences, null bytes (\`\\x00\`), and other path traversal characters — this prevents archive directory escapes (e.g., a user input of \`/etc/passwd\` must never create an archive outside the project root)
+6. Keep it concise (3-5 words maximum)
+
+## Examples
+- "User Authentication System" → \`user-authentication\`
+- "Fix: Payment Webhook Timeout" → \`payment-webhook-timeout-fix\`
+- "Dashboard Filtering for Admins" → \`dashboard-admin-filtering\`
+
+**Security note**: If the input contains path traversal attempts (e.g., \`../etc/passwd\`, \`..\\windows\\system32\`), strip all \`..\` sequences, null bytes, and backslashes before applying other rules. The resulting archive name must only contain lowercase alphanumeric characters, hyphens, and underscores — never a path component.
+
+## Sanitization Examples (path traversal protection)
+- \`"Fix ../etc/passwd reader"\` → \`fix-passwd-reader\` (strips \`..\` and \`/\`)
+- \`"Backslash attack ..\\windows\\system32"\` → \`backslash-attack-windows-system32\`
+- \`"Null byte \\x00 bypass"\` → \`null-byte-bypass\`
+
+## User Confirmation
+Before generating specs, ask: "Archive previous spec as '2026-03-09-user-authentication'? (provide custom name or press enter to accept)"
+
 # EXECUTION RULES
-1. **Requirements (\`specs/requirements.md\`):** Analyze the request. For any technical divergence, missing constraint, or ambiguity, present structured options to the user (Context, Option A, Option B, Recommended) and wait for a selection.
-2. **Architecture (\`specs/design.md\`):** Synthesize approved requirements into a technical architecture, defining data models, security boundaries, and verification strategies.
-3. **Tasks (\`specs/tasks.md\`):** Translate the plan into a chronological checklist (\`- [ ]\`). Tasks must be atomic (1-2 files max) and explicitly state how they will be verified.
-4. **Handoff:** Once all files are generated and explicitly approved by the user, report back to the Orchestrator: "DISCOVERY COMPLETE. SDD artifacts generated and approved."`,
+
+## For FEATURE Mode
+
+### 1. Create \`requirements.md\`
+Structure:
+\`\`\`markdown
+# Requirements: [Feature Name]
+
+## User Stories
+[Context and motivation for the feature]
+
+## Functional Requirements
+FR-1: [EARS formatted requirement]
+FR-2: [EARS formatted requirement]
+...
+
+## Non-Functional Requirements
+NFR-1: [Performance, security, or other constraints in EARS format]
+...
+
+## Constraints
+- [Technical or business constraints]
+\`\`\`
+
+### 2. Create \`design.md\`
+Include:
+- System architecture overview
+- Data models and schemas
+- API contracts (if applicable)
+- Security considerations
+- Error handling strategy
+- Testing approach
+
+### 3. Create \`tasks.md\`
+Generate atomic, verifiable tasks:
+\`\`\`markdown
+# Implementation Tasks
+
+## Setup
+- [ ] [Task description]
+
+## Core Implementation
+- [ ] [Task description]
+
+## Verification
+- [ ] [Task description]
+\`\`\`
+
+## For BUGFIX Mode
+
+### 1. Create \`bugfix.md\`
+Structure:
+\`\`\`markdown
+# Bugfix: [Brief Description]
+
+## Current Behavior
+[Describe what happens now - be specific about error messages, stack traces, symptoms]
+
+## Expected Behavior
+[Describe what should happen - use EARS notation]
+
+## Steps to Reproduce
+1. [Step 1]
+2. [Step 2]
+...
+
+## Root Cause Analysis
+[Initial analysis of what causes the bug]
+
+## Unchanged Behavior
+- [List what must continue working exactly as before]
+- [Prevent regression by documenting existing functionality]
+\`\`\`
+
+### 2. Create \`design.md\`
+Include:
+- Fix approach and strategy
+- Files to be modified
+- Testing approach for the fix
+- Regression prevention measures
+
+### 3. Create \`tasks.md\`
+\`\`\`markdown
+# Bugfix Tasks
+
+## Investigation
+- [ ] [Task to identify root cause]
+
+## Fix Implementation
+- [ ] [Task to implement the fix]
+
+## Verification
+- [ ] [Task to verify fix works]
+- [ ] [Task to verify no regressions]
+\`\`\`
+
+# HANDOFF
+Once all files are generated and user approves:
+1. Report the detected mode
+2. Report the archive name
+3. State: "DISCOVERY COMPLETE. Mode: [FEATURE|BUGFIX]. Archive name: [name]. SDD artifacts generated and approved."`,
 
   ".claude/agents/implementer.md": `# ROLE AND PURPOSE
 You are the Implementer subagent. Your sole responsibility is to execute specific, atomic coding tasks delegated by the Orchestrator.
@@ -76,49 +439,23 @@ If the task involves building or modifying React components, you cannot rely on 
 5. **Enforce:** If the script throws an error or fails an assertion, reject the implementation. If it passes, delete \`verify_temp.tsx\` and approve the task.`
 };
 
-const claudeTrigger = `
-# CUSTOM WORKFLOWS & TRIGGERS
-
-## The Spectremon SDD Framework
-**The Trigger:** If I say "Start Spectremon" or "Boot up the Orchestrator":
-1. Read \`.claude/spectremon.md\`.
-2. Adopt the Persona and Execution Loop defined there.
-3. Stop acting as a standard assistant.
-
-## State Protection
-Treat the \`specs/\` directory as read-only unless Spectremon mode is active.
-`;
-
-// --- 3. EXECUTE INSTALLATION ---
 console.log("🚀 Initializing Spectremon with Bun...");
 
-// Create directories
-dirs.forEach(dir => {
-  if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true });
-    console.log(`✅ Created directory: ${relative(targetDir, dir)}`);
+try {
+  dirs.forEach(dir => safeMkdir(dir));
+
+  for (const [filePath, content] of Object.entries(files)) {
+    safeWriteAgentFile(filePath, content);
   }
-});
 
-// Write core files
-for (const [filePath, content] of Object.entries(files)) {
-  const fullPath = join(targetDir, filePath);
-  writeFileSync(fullPath, content, "utf8");
-  console.log(`✅ Created file: ${filePath}`);
+  handleClaudeMdUpdate();
+
+  console.log("\n✨ Spectremon installation complete!");
+} catch (err: unknown) {
+  const message = err instanceof Error ? err.message : String(err);
+  console.error("");
+  console.error(message);
+  console.error("");
+  console.error("❌ Spectremon initialization failed. Please try again or check for issues.\n");
+  process.exit(1);
 }
-
-// Handle CLAUDE.md
-const claudeMdPath = join(targetDir, "CLAUDE.md");
-if (existsSync(claudeMdPath)) {
-  const currentContent = readFileSync(claudeMdPath, "utf8");
-  if (!currentContent.includes("The Spectremon SDD Framework")) {
-    appendFileSync(claudeMdPath, `\n${claudeTrigger}`, "utf8");
-    console.log(`✅ Appended Spectremon trigger to existing CLAUDE.md`);
-  }
-} else {
-  const defaultClaude = `# DEFAULT BEHAVIOR\nYou are a helpful, expert coding assistant.\n${claudeTrigger}`;
-  writeFileSync(claudeMdPath, defaultClaude, "utf8");
-  console.log(`✅ Created new CLAUDE.md with Spectremon trigger`);
-}
-
-console.log("\n✨ Spectremon installation complete!");
