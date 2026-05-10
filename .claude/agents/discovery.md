@@ -49,12 +49,20 @@ Extract a descriptive, URL-friendly name from the request:
 2. Convert to lowercase
 3. Replace spaces with hyphens
 4. Remove special characters except hyphens
-5. Keep it concise (3-5 words maximum)
+5. **Security sanitization**: Strip `..` sequences, null bytes (`\x00`), and other path traversal characters — this prevents archive directory escapes (e.g., a user input of `/etc/passwd` must never create an archive outside the project root)
+6. Keep it concise (3-5 words maximum)
 
 ## Examples
 - "User Authentication System" → `user-authentication`
 - "Fix: Payment Webhook Timeout" → `payment-webhook-timeout-fix`
 - "Dashboard Filtering for Admins" → `dashboard-admin-filtering`
+
+**Security note**: If the input contains path traversal attempts (e.g., `../etc/passwd`, `..\\windows\\system32`), strip all `..` sequences, null bytes, and backslashes before applying other rules. The resulting archive name must only contain lowercase alphanumeric characters, hyphens, and underscores — never a path component.
+
+## Sanitization Examples (path traversal protection)
+- `"Fix ../etc/passwd reader"` → `fix-passwd-reader` (strips `..` and `/`)
+- `"Backslash attack ..\\windows\\system32"` → `backslash-attack-windows-system32`
+- `"Null byte \x00 bypass"` → `null-byte-bypass`
 
 ## User Confirmation
 Before generating specs, ask: "Archive previous spec as '2026-03-09-user-authentication'? (provide custom name or press enter to accept)"
