@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
 import { existsSync, mkdirSync, writeFileSync, readFileSync, appendFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { dirname, join, relative } from "node:path";
 
 const targetDir = process.cwd();
@@ -18,6 +19,20 @@ function safeMkdir(dir: string): void {
       `Failed to create directory \`${relative(targetDir, dir)}\`:\n${message}\n\n` +
         "Check that you have write permissions in the parent directory and sufficient disk space."
     );
+  }
+}
+
+// --- HELPER: idempotent file creation (skip if unchanged) ---
+function shouldSkipFile(filePath: string, newContent: string): boolean {
+  const fullPath = join(targetDir, filePath);
+  if (!existsSync(fullPath)) return false;
+  try {
+    const existingContent = readFileSync(fullPath, "utf8");
+    const existingHash = createHash("sha256").update(existingContent).digest("hex");
+    const newHash = createHash("sha256").update(newContent).digest("hex");
+    return existingHash === newHash; // file matches our template, skip
+  } catch {
+    return false;
   }
 }
 
@@ -62,6 +77,37 @@ function safeReadFile(filePath: string): string {
     throw new Error(
       `Failed to read \`${filePath}\`:\n${message}\n\n` +
         "Check that the file exists and is readable."
+    );
+  }
+}
+
+// --- HELPER: safe write with idempotency for agent files ---
+function safeWriteAgentFile(filePath: string, content: string): void {
+  if (shouldSkipFile(filePath, content)) {
+    console.log(`⏭️  Skipped ${filePath} — file is up to date`);
+    return;
+  }
+
+  const fullPath = join(targetDir, filePath);
+  try {
+    // If the file exists but differs from our template, warn the user
+    if (existsSync(fullPath)) {
+      const existingContent = safeReadFile(filePath);
+      const existingHash = createHash("sha256").update(existingContent).digest("hex");
+      const newHash = createHash("sha256").update(content).digest("hex");
+      if (existingHash !== newHash) {
+        console.log(`⚠️  ${filePath} has been modified — updating with latest version`);
+      }
+    }
+
+    safeWriteFile(filePath, content);
+    console.log(`✅ Created file: ${filePath}`);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`   ❌ Failed to update ${filePath}: ${message}`);
+    throw new Error(
+      `Failed to write \`${filePath}\`:\n${message}\n\n` +
+        "Check that you have write permissions in the current directory and sufficient disk space."
     );
   }
 }
@@ -157,10 +203,9 @@ try {
   // Create directories
   dirs.forEach(dir => safeMkdir(dir));
 
-  // Write core files
+  // Write core files (idempotent — skip if unchanged)
   for (const [filePath, content] of Object.entries(files)) {
-    safeWriteFile(filePath, content);
-    console.log(`✅ Created file: ${filePath}`);
+    safeWriteAgentFile(filePath, content);
   }
 
   // Handle CLAUDE.md

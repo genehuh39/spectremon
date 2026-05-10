@@ -3,6 +3,7 @@
 
 // index.ts
 import { existsSync, mkdirSync, writeFileSync, readFileSync, appendFileSync } from "fs";
+import { createHash } from "crypto";
 import { dirname, join, relative } from "path";
 var targetDir = process.cwd();
 function safeMkdir(dir) {
@@ -18,6 +19,19 @@ function safeMkdir(dir) {
 ${message}
 
 ` + "Check that you have write permissions in the parent directory and sufficient disk space.");
+  }
+}
+function shouldSkipFile(filePath, newContent) {
+  const fullPath = join(targetDir, filePath);
+  if (!existsSync(fullPath))
+    return false;
+  try {
+    const existingContent = readFileSync(fullPath, "utf8");
+    const existingHash = createHash("sha256").update(existingContent).digest("hex");
+    const newHash = createHash("sha256").update(newContent).digest("hex");
+    return existingHash === newHash;
+  } catch {
+    return false;
   }
 }
 function safeWriteFile(filePath, content) {
@@ -59,6 +73,32 @@ function safeReadFile(filePath) {
 ${message}
 
 ` + "Check that the file exists and is readable.");
+  }
+}
+function safeWriteAgentFile(filePath, content) {
+  if (shouldSkipFile(filePath, content)) {
+    console.log(`\u23ED\uFE0F  Skipped ${filePath} \u2014 file is up to date`);
+    return;
+  }
+  const fullPath = join(targetDir, filePath);
+  try {
+    if (existsSync(fullPath)) {
+      const existingContent = safeReadFile(filePath);
+      const existingHash = createHash("sha256").update(existingContent).digest("hex");
+      const newHash = createHash("sha256").update(content).digest("hex");
+      if (existingHash !== newHash) {
+        console.log(`\u26A0\uFE0F  ${filePath} has been modified \u2014 updating with latest version`);
+      }
+    }
+    safeWriteFile(filePath, content);
+    console.log(`\u2705 Created file: ${filePath}`);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`   \u274C Failed to update ${filePath}: ${message}`);
+    throw new Error(`Failed to write \`${filePath}\`:
+${message}
+
+` + "Check that you have write permissions in the current directory and sufficient disk space.");
   }
 }
 var dirs = [
@@ -141,8 +181,7 @@ console.log("\uD83D\uDE80 Initializing Spectremon with Bun...");
 try {
   dirs.forEach((dir) => safeMkdir(dir));
   for (const [filePath, content] of Object.entries(files)) {
-    safeWriteFile(filePath, content);
-    console.log(`\u2705 Created file: ${filePath}`);
+    safeWriteAgentFile(filePath, content);
   }
   const claudeMdPath = join(targetDir, "CLAUDE.md");
   if (existsSync(claudeMdPath)) {
