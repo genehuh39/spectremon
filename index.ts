@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 import { dirname, join, relative } from "node:path";
 
 const targetDir = process.cwd();
-const CLAUDE_MD_VERSION = "v3.0.0";
+const CLAUDE_MD_VERSION = "v3.0.1";
 const SPECTREMON_SECTION_START = "# CUSTOM WORKFLOWS & TRIGGERS";
 const SPECTREMON_SECTION_END = "Treat the `specs/` directory as read-only unless Spectremon mode is active.";
 const LEGACY_SPECTREMON_HEADING = "## The Spectremon SDD Framework";

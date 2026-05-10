@@ -6,7 +6,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } fr
 import { createHash } from "crypto";
 import { dirname, join, relative } from "path";
 var targetDir = process.cwd();
-var CLAUDE_MD_VERSION = "v3.0.0";
+var CLAUDE_MD_VERSION = "v3.0.1";
 var SPECTREMON_SECTION_START = "# CUSTOM WORKFLOWS & TRIGGERS";
 var SPECTREMON_SECTION_END = "Treat the `specs/` directory as read-only unless Spectremon mode is active.";
 var LEGACY_SPECTREMON_HEADING = "## The Spectremon SDD Framework";
