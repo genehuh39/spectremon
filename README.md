@@ -41,6 +41,14 @@ The installer writes the following into your project:
             └── architect.md     # Phase 4: Review & Verification
 ```
 
+The installed Claude Code project subagents are registered as:
+
+- `spectremon-discovery`
+- `spectremon-implementer`
+- `spectremon-architect`
+
+Their descriptions restrict automatic routing to work explicitly delegated by the Spectremon orchestrator.
+
 ## Usage
 
 Once installed, trigger the framework inside Claude Code by saying:
