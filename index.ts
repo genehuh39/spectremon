@@ -84,19 +84,19 @@ function extractAgentFrontmatter(content: string): string {
 
 function migrateOrchestratorDelegation(content: string): string {
   return content
-    .replace(
+    .replaceAll(
       "Invoke the **Discovery** subagent (`.claude/agents/discovery.md`)",
       "Delegate to the **spectremon-discovery** subagent"
     )
-    .replace(
+    .replaceAll(
       "Invoke the **Implementer** subagent (`.claude/agents/implementer.md`)",
       "Delegate to the **spectremon-implementer** subagent"
     )
-    .replace(
+    .replaceAll(
       "invoke the **Architect** subagent (`.claude/agents/architect.md`)",
       "delegate to a fresh **spectremon-architect** subagent context"
     )
-    .replace(
+    .replaceAll(
       "invoke the **Senior Software Architect** subagent (`.claude/agents/architect.md`)",
       "delegate to a fresh **spectremon-architect** subagent context"
     );
@@ -113,7 +113,7 @@ function safeWriteAgentFile(filePath: string, content: string): void {
   }
 
   const existingContent = safeReadFile(filePath);
-  if (filePath.startsWith(".claude/agents/") && !existingContent.startsWith("---\n")) {
+  if (filePath.startsWith(".claude/agents/") && !/^---\r?\n/.test(existingContent)) {
     safeWriteFile(filePath, `${extractAgentFrontmatter(content)}\n${existingContent}`);
     console.log(`✅ Registered existing agent: ${filePath} (prompt content preserved)`);
     return;

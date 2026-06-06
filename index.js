@@ -77,7 +77,7 @@ function extractAgentFrontmatter(content) {
   return match[0];
 }
 function migrateOrchestratorDelegation(content) {
-  return content.replace("Invoke the **Discovery** subagent (`.claude/agents/discovery.md`)", "Delegate to the **spectremon-discovery** subagent").replace("Invoke the **Implementer** subagent (`.claude/agents/implementer.md`)", "Delegate to the **spectremon-implementer** subagent").replace("invoke the **Architect** subagent (`.claude/agents/architect.md`)", "delegate to a fresh **spectremon-architect** subagent context").replace("invoke the **Senior Software Architect** subagent (`.claude/agents/architect.md`)", "delegate to a fresh **spectremon-architect** subagent context");
+  return content.replaceAll("Invoke the **Discovery** subagent (`.claude/agents/discovery.md`)", "Delegate to the **spectremon-discovery** subagent").replaceAll("Invoke the **Implementer** subagent (`.claude/agents/implementer.md`)", "Delegate to the **spectremon-implementer** subagent").replaceAll("invoke the **Architect** subagent (`.claude/agents/architect.md`)", "delegate to a fresh **spectremon-architect** subagent context").replaceAll("invoke the **Senior Software Architect** subagent (`.claude/agents/architect.md`)", "delegate to a fresh **spectremon-architect** subagent context");
 }
 function safeWriteAgentFile(filePath, content) {
   const fullPath = join(targetDir, filePath);
@@ -87,8 +87,7 @@ function safeWriteAgentFile(filePath, content) {
     return;
   }
   const existingContent = safeReadFile(filePath);
-  if (filePath.startsWith(".claude/agents/") && !existingContent.startsWith(`---
-`)) {
+  if (filePath.startsWith(".claude/agents/") && !/^---\r?\n/.test(existingContent)) {
     safeWriteFile(filePath, `${extractAgentFrontmatter(content)}
 ${existingContent}`);
     console.log(`\u2705 Registered existing agent: ${filePath} (prompt content preserved)`);

@@ -135,11 +135,31 @@ describe("Claude Code subagents", () => {
     }
   });
 
+  test("upgrade recognizes existing CRLF agent frontmatter", () => {
+    const targetDir = mkdtempSync(join(tmpdir(), "spectremon-test-"));
+    temporaryDirectories.push(targetDir);
+    const agentPath = join(targetDir, agentPaths[0]);
+    const crlfAgent = "---\r\nname: custom-agent\r\ndescription: custom\r\n---\r\n\r\n# CUSTOM PROMPT\r\n";
+    mkdirSync(join(agentPath, ".."), { recursive: true });
+    writeFileSync(agentPath, crlfAgent);
+
+    const result = Bun.spawnSync({
+      cmd: [process.execPath, installerPath],
+      cwd: targetDir,
+      stdout: "pipe",
+      stderr: "pipe"
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(readFileSync(agentPath, "utf8")).toBe(crlfAgent);
+  });
+
   test("upgrade migrates legacy orchestrator delegation without replacing other content", () => {
     const targetDir = mkdtempSync(join(tmpdir(), "spectremon-test-"));
     temporaryDirectories.push(targetDir);
     const orchestratorPath = join(targetDir, ".claude/spectremon.md");
     const customContent = `# CUSTOM ORCHESTRATOR
+Invoke the **Discovery** subagent (\`.claude/agents/discovery.md\`)
 Invoke the **Discovery** subagent (\`.claude/agents/discovery.md\`)
 Invoke the **Implementer** subagent (\`.claude/agents/implementer.md\`)
 Then invoke the **Architect** subagent (\`.claude/agents/architect.md\`).
@@ -160,6 +180,7 @@ LOCAL CONTENT MUST REMAIN
     for (const agentName of expectedAgentNames) {
       expect(migrated).toContain(agentName);
     }
+    expect(migrated.match(/spectremon-discovery/g)).toHaveLength(2);
     expect(migrated).toContain("LOCAL CONTENT MUST REMAIN");
     expect(migrated).not.toContain(".claude/agents/");
   });
