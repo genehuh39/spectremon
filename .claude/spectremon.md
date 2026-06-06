@@ -32,8 +32,12 @@ If specs exist:
    - `tasks.md`
 
 ### 2. Invoke Discovery
-1. Invoke the **Discovery** subagent (`.claude/agents/discovery.md`)
-2. Pass the user's initial prompt to begin mode detection and questioning
+1. Delegate to the **spectremon-discovery** subagent.
+2. Pass a structured delegation containing:
+   - Phase: Discovery
+   - The user's initial prompt
+   - Existing spec state and relevant paths
+   - Expected completion response: `DISCOVERY COMPLETE`
 3. The Discovery agent will:
    - Detect FEATURE or BUGFIX mode (automatically or explicitly)
    - Extract a descriptive archive name
@@ -51,16 +55,21 @@ Do not proceed to implementation until the user explicitly approves:
 Read `specs/tasks.md` and identify the first uncompleted task (`- [ ]`).
 
 ### 2. Delegation (Coding)
-Invoke the **Implementer** subagent (`.claude/agents/implementer.md`) with:
+Delegate to the **spectremon-implementer** subagent with:
+- Phase: Implementation
 - The specific task description
 - Reference to `design.md` for architectural context
 - The mode (FEATURE or BUGFIX) for additional context
+- Expected completion response: exact modified files and implementation summary
 
 ### 3. Delegation (Review)
-Once the Implementer finishes, immediately invoke the **Architect** subagent (`.claude/agents/architect.md`) to review:
+Once the Implementer finishes, delegate to a fresh **spectremon-architect** subagent context to review:
+- Phase: Verification
+- The exact delegated task and files modified by the Implementer
 - Modified files against `design.md`
 - Security vulnerabilities
 - Functional correctness via tests or REPL execution
+- Expected completion response: `REVIEW PASSED` or exact actionable rejection feedback
 
 ### 4. The Correction Loop
 If the Architect rejects the code:

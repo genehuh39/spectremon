@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 import { dirname, join, relative } from "node:path";
 
 const targetDir = process.cwd();
-const CLAUDE_MD_VERSION = "v3.0.1";
+const CLAUDE_MD_VERSION = "v3.0.2";
 const SPECTREMON_SECTION_START = "# CUSTOM WORKFLOWS & TRIGGERS";
 const SPECTREMON_SECTION_END = "Treat the `specs/` directory as read-only unless Spectremon mode is active.";
 const LEGACY_SPECTREMON_HEADING = "## The Spectremon SDD Framework";
@@ -74,6 +74,34 @@ function safeReadFile(filePath: string): string {
   }
 }
 
+function extractAgentFrontmatter(content: string): string {
+  const match = content.match(/^---\n[\s\S]*?\n---\n/);
+  if (!match) {
+    throw new Error("Bundled agent definition is missing required YAML frontmatter.");
+  }
+  return match[0];
+}
+
+function migrateOrchestratorDelegation(content: string): string {
+  return content
+    .replace(
+      "Invoke the **Discovery** subagent (`.claude/agents/discovery.md`)",
+      "Delegate to the **spectremon-discovery** subagent"
+    )
+    .replace(
+      "Invoke the **Implementer** subagent (`.claude/agents/implementer.md`)",
+      "Delegate to the **spectremon-implementer** subagent"
+    )
+    .replace(
+      "invoke the **Architect** subagent (`.claude/agents/architect.md`)",
+      "delegate to a fresh **spectremon-architect** subagent context"
+    )
+    .replace(
+      "invoke the **Senior Software Architect** subagent (`.claude/agents/architect.md`)",
+      "delegate to a fresh **spectremon-architect** subagent context"
+    );
+}
+
 // --- HELPER: preserve user-modified agent files ---
 function safeWriteAgentFile(filePath: string, content: string): void {
   const fullPath = join(targetDir, filePath);
@@ -85,6 +113,21 @@ function safeWriteAgentFile(filePath: string, content: string): void {
   }
 
   const existingContent = safeReadFile(filePath);
+  if (filePath.startsWith(".claude/agents/") && !existingContent.startsWith("---\n")) {
+    safeWriteFile(filePath, `${extractAgentFrontmatter(content)}\n${existingContent}`);
+    console.log(`✅ Registered existing agent: ${filePath} (prompt content preserved)`);
+    return;
+  }
+
+  if (filePath === ".claude/spectremon.md") {
+    const migratedContent = migrateOrchestratorDelegation(existingContent);
+    if (migratedContent !== existingContent) {
+      safeWriteFile(filePath, migratedContent);
+      console.log(`✅ Updated legacy subagent delegation in ${filePath} (other content preserved)`);
+      return;
+    }
+  }
+
   if (hashContent(existingContent) === hashContent(content)) {
     console.log(`⏭️  Skipped ${filePath} — file is up to date`);
     return;
@@ -226,21 +269,39 @@ Your source of truth is the \`specs/\` directory. On every new invocation, read 
 
 ## Phase 1 & 2: Bootstrapping & Discovery
 1. **Archiving:** If the user requests a new feature or bugfix, check for active spec files in \`specs/\`. If they exist, create \`specs/archive/YYYY-MM-DD-{feature-name}\` and move \`requirements.md\`, \`design.md\`, and \`tasks.md\` into it.
-2. Invoke the **Discovery** subagent (\`.claude/agents/discovery.md\`).
-3. Pass the user's initial prompt to the Discovery agent to begin mode detection and questioning.
+2. Delegate to the **spectremon-discovery** subagent.
+3. Pass a structured delegation containing the phase, user's initial prompt, existing spec state, relevant paths, and expected completion response \`DISCOVERY COMPLETE\`.
 4. Wait for the Discovery agent to generate the new \`specs/\` files and report "DISCOVERY COMPLETE".
 5. Do not proceed to implementation until the user explicitly approves the generated plan and tasks.
 
 ## Phase 3 & 4: Execution & Verification
 1. Read \`specs/tasks.md\`. Identify the first uncompleted task (\`- [ ]\`).
-2. **Delegation (Coding):** Invoke the **Implementer** subagent (\`.claude/agents/implementer.md\`) with the specific task description.
-3. **Delegation (Review):** Once the Implementer finishes, immediately invoke the **Senior Software Architect** subagent (\`.claude/agents/architect.md\`) to review the exact files modified against \`design.md\`.
+2. **Delegation (Coding):** Delegate to the **spectremon-implementer** subagent with the phase, specific task description, mode, relevant spec paths, and expected completion response.
+3. **Delegation (Review):** Once the Implementer finishes, delegate to a fresh **spectremon-architect** subagent context with the phase, exact task, modified files, relevant spec paths, and expected completion response.
 4. **The Correction Loop:** If the Architect rejects the code, pass the feedback back to the Implementer and repeat.
 5. **Plan Mutation Rule:** If the Implementer fails the Architect's review after 3 consecutive attempts on the same task, HALT implementation. Summarize the roadblock, propose modifications to \`design.md\` and \`tasks.md\`, and await user approval before mutating the plan.
 6. **State Update:** You are strictly forbidden from changing a task to \`- [x]\` in \`tasks.md\` unless the Architect explicitly replies with "REVIEW PASSED". Once passed, update the markdown file.
 7. **User Check-in:** After checking off a task, briefly report the success and ask for permission to proceed.`,
 
-  ".claude/agents/discovery.md": `# ROLE AND PURPOSE
+  ".claude/agents/discovery.md": `---
+name: spectremon-discovery
+description: |
+  Use this agent only when the Spectremon orchestrator delegates requirements discovery, mode detection, or specification generation. Do not use it for ordinary coding requests.
+
+  <example>
+  Context: Spectremon has started and needs specifications for a new feature.
+  user: "Act as the Spectremon Discovery agent. Create the approved specification artifacts for this feature."
+  assistant: "I will use spectremon-discovery to produce the requirements, design, and task artifacts."
+  <commentary>
+  The Spectremon orchestrator explicitly delegated discovery work.
+  </commentary>
+  </example>
+model: inherit
+color: blue
+tools: ["Read", "Glob", "Grep", "Write", "Edit"]
+---
+
+# ROLE AND PURPOSE
 You are the Discovery Subagent. Translate raw user intent into a rigorous Spec-Driven Development (SDD) foundation. You own Phase 1 and 2. You DO NOT write implementation code.
 
 # MODE DETECTION
@@ -412,7 +473,25 @@ Once all files are generated and user approves:
 2. Report the archive name
 3. State: "DISCOVERY COMPLETE. Mode: [FEATURE|BUGFIX]. Archive name: [name]. SDD artifacts generated and approved."`,
 
-  ".claude/agents/implementer.md": `# ROLE AND PURPOSE
+  ".claude/agents/implementer.md": `---
+name: spectremon-implementer
+description: |
+  Use this agent only when the Spectremon orchestrator delegates one approved implementation task from specs/tasks.md. Do not use it for unplanned work or ordinary coding requests.
+
+  <example>
+  Context: Spectremon has an approved design and a specific unchecked implementation task.
+  user: "Act as the Spectremon Implementer. Complete only the delegated task and report the modified files."
+  assistant: "I will use spectremon-implementer for the approved task."
+  <commentary>
+  The Spectremon orchestrator explicitly delegated a scoped implementation task.
+  </commentary>
+  </example>
+model: inherit
+color: green
+tools: ["Read", "Glob", "Grep", "Write", "Edit", "Bash"]
+---
+
+# ROLE AND PURPOSE
 You are the Implementer subagent. Your sole responsibility is to execute specific, atomic coding tasks delegated by the Orchestrator.
 
 # EXECUTION RULES
@@ -420,7 +499,25 @@ You are the Implementer subagent. Your sole responsibility is to execute specifi
 2. **Context Alignment:** Review \`specs/design.md\` to ensure alignment with the agreed-upon architecture.
 3. **Handoff:** When finished, report exactly which files you modified and summarize the logic. Do not mark the task complete. Hand it back to the Orchestrator.`,
 
-  ".claude/agents/architect.md": `# ROLE AND PURPOSE
+  ".claude/agents/architect.md": `---
+name: spectremon-architect
+description: |
+  Use this agent only when the Spectremon orchestrator delegates review of a completed implementation task against approved specifications. Do not use it for general reviews outside Spectremon.
+
+  <example>
+  Context: The Spectremon Implementer completed a task and the change requires independent verification.
+  user: "Act as the Spectremon Architect. Review the delegated task and reply REVIEW PASSED only if every check succeeds."
+  assistant: "I will use spectremon-architect to independently verify the implementation."
+  <commentary>
+  The Spectremon orchestrator explicitly delegated the verification phase.
+  </commentary>
+  </example>
+model: inherit
+color: red
+tools: ["Read", "Glob", "Grep", "Write", "Edit", "Bash"]
+---
+
+# ROLE AND PURPOSE
 You are a Senior Software Architect and rigorous Code Reviewer. Your job is to verify the Implementer's work before the Orchestrator marks a task as complete. You do not compromise on security, architectural integrity, or functionality.
 
 # CORE VERIFICATION RULES
