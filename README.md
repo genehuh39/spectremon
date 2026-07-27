@@ -182,6 +182,8 @@ The **Architect** subagent reviews every change before it is marked complete. It
 
 For React/UI tasks, it renders components headlessly and asserts the output. A task is only marked `[x]` after the Architect replies **"REVIEW PASSED"**.
 
+The Architect deliberately has no Write or Edit tools — it can only approve or reject with feedback, so every fix goes back through the Implementer and the reviewer stays independent.
+
 ### Correction Loop
 
 If the Implementer fails the Architect's review **3 times** on the same task, the Orchestrator halts, summarizes the blocker, and proposes spec changes for your approval before continuing.
@@ -189,6 +191,8 @@ If the Implementer fails the Architect's review **3 times** on the same task, th
 ## State Management
 
 All spec state lives in `specs/` at your project root. This directory is treated as read-only outside of Spectremon mode.
+
+With the plugin installed this is enforced mechanically, not just by instruction: a `PreToolUse` hook blocks Write/Edit calls into `specs/` unless the orchestrator's mode flag (`specs/.spectremon-active`) is present. The orchestrator creates the flag when Spectremon starts and removes it on exit. (The hook guards against accidental edits by Claude; it is not a security boundary — shell commands can still touch the directory.)
 
 ```text
 /your-project-root

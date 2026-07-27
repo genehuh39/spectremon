@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -97,6 +97,44 @@ describe("Claude Code plugin", () => {
       expect(skill).toContain(agentName);
     }
     expect(skill).toContain("fresh **spectremon-architect** subagent context");
+  });
+
+  test("architect agent is review-only (no Write/Edit tools)", () => {
+    const architect = readAgentDefinition(join(projectRoot, "agents/architect.md"));
+    expect(architect.tools).not.toContain('"Write"');
+    expect(architect.tools).not.toContain('"Edit"');
+    expect(architect.tools).toContain('"Bash"');
+  });
+
+  test("specs protection hook is wired and executable", () => {
+    const hooks = JSON.parse(readFileSync(join(projectRoot, "hooks/hooks.json"), "utf8"));
+    const [entry] = hooks.hooks.PreToolUse;
+    expect(entry.matcher).toBe("Write|Edit");
+    expect(entry.hooks[0].command).toBe("${CLAUDE_PLUGIN_ROOT}/hooks/protect-specs.sh");
+    expect(statSync(join(projectRoot, "hooks/protect-specs.sh")).mode & 0o111).toBeTruthy();
+  });
+
+  test("specs protection hook blocks and allows edits based on the mode flag", () => {
+    const targetDir = mkdtempSync(join(tmpdir(), "spectremon-hook-test-"));
+    temporaryDirectories.push(targetDir);
+    const scriptPath = join(projectRoot, "hooks/protect-specs.sh");
+    const runHook = (filePath: string) =>
+      Bun.spawnSync({
+        cmd: ["bash", scriptPath],
+        cwd: targetDir,
+        env: { ...process.env, CLAUDE_PROJECT_DIR: targetDir },
+        stdin: Buffer.from(JSON.stringify({ tool_name: "Write", tool_input: { file_path: filePath } })),
+        stdout: "pipe",
+        stderr: "pipe"
+      });
+
+    expect(runHook(join(targetDir, "src/app.ts")).exitCode).toBe(0);
+    expect(runHook(join(targetDir, "specs/tasks.md")).exitCode).toBe(2);
+    expect(runHook("specs/tasks.md").exitCode).toBe(2);
+
+    mkdirSync(join(targetDir, "specs"), { recursive: true });
+    writeFileSync(join(targetDir, "specs/.spectremon-active"), "");
+    expect(runHook(join(targetDir, "specs/tasks.md")).exitCode).toBe(0);
   });
 
   test("plugin and marketplace manifests are valid", () => {
