@@ -97,6 +97,21 @@ describe("Claude Code plugin", () => {
       expect(skill).toContain(agentName);
     }
     expect(skill).toContain("fresh **spectremon-architect** subagent context");
+    expect(skill).toContain("spectremon:execute-task");
+  });
+
+  test("execute-task workflow script is syntactically valid and wired to the agents", () => {
+    const script = readFileSync(join(projectRoot, "workflows/execute-task.js"), "utf8");
+
+    // Workflow scripts execute in an async function context (top-level
+    // await/return), so syntax-check the body the way the runtime wraps it.
+    const body = script.replace(/^export /m, "");
+    expect(() => new Function(`return (async () => { ${body} })`)).not.toThrow();
+
+    expect(script).toContain("name: 'execute-task'");
+    expect(script).toContain("agentType: 'spectremon-implementer'");
+    expect(script).toContain("agentType: 'spectremon-architect'");
+    expect(script).toContain("MAX_ATTEMPTS = 3");
   });
 
   test("architect agent is review-only (no Write/Edit tools)", () => {
