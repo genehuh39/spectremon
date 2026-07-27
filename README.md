@@ -15,7 +15,7 @@ Spectremon ships as a native Claude Code plugin. Inside Claude Code:
 /plugin install spectremon@spectremon
 ```
 
-The plugin registers the three subagents and a `/spectremon:start` skill — no files are written into your project. To try it locally without installing:
+The plugin registers the three subagents, the `/spectremon:start` skill, the `spectremon:execute-task` workflow, and the `specs/` protection hooks — no files are written into your project. To try it locally without installing:
 
 ```bash
 claude --plugin-dir /path/to/spectremon
@@ -52,11 +52,15 @@ The installer writes the following into your project:
   ├── CLAUDE.md                  # Appended with the Spectremon trigger
   └── .claude/
        ├── spectremon.md         # Orchestrator instructions
-       └── agents/
-            ├── discovery.md     # Phase 1 & 2: Requirements & Architecture
-            ├── implementer.md   # Phase 3: Coding
-            └── architect.md     # Phase 4: Review & Verification
+       ├── agents/
+       │    ├── discovery.md     # Phase 1 & 2: Requirements & Architecture
+       │    ├── implementer.md   # Phase 3: Coding
+       │    └── architect.md     # Phase 4: Review & Verification
+       └── workflows/
+            └── execute-task.js  # Phase 3 & 4: implement → review loop
 ```
+
+The installer does not modify `settings.json`, so the plugin-only `specs/` protection hooks are not included.
 
 The installed Claude Code project subagents are registered as:
 
@@ -180,7 +184,7 @@ The **Architect** subagent reviews every change before it is marked complete. It
 - Functional correctness via automated tests or REPL execution
 - Regression prevention (for bugfixes)
 
-For React/UI tasks, it renders components headlessly and asserts the output. A task is only marked `[x]` after the Architect replies **"REVIEW PASSED"**.
+For React/UI tasks, it renders components headlessly and asserts the output. A task is only marked `[x]` after the Architect returns a passing verdict — structured `{passed: true, feedback}` on the workflow path, or the literal reply **"REVIEW PASSED"** in manual fallback delegations.
 
 The Architect deliberately has no Write or Edit tools — it can only approve or reject with feedback, so every fix goes back through the Implementer and the reviewer stays independent.
 
