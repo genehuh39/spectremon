@@ -192,7 +192,11 @@ If the Implementer fails the Architect's review **3 times** on the same task, th
 
 All spec state lives in `specs/` at your project root. This directory is treated as read-only outside of Spectremon mode.
 
-With the plugin installed this is enforced mechanically, not just by instruction: a `PreToolUse` hook blocks Write/Edit calls into `specs/` unless the orchestrator's mode flag (`specs/.spectremon-active`) is present. The orchestrator creates the flag when Spectremon starts and removes it on exit. (The hook guards against accidental edits by Claude; it is not a security boundary — shell commands can still touch the directory.)
+With the plugin installed this is enforced mechanically, not just by instruction. The full contract:
+
+- A `PreToolUse` hook blocks the file-editing tools (Write, Edit, NotebookEdit) from touching `specs/` unless the mode flag `specs/.spectremon-active` is present. Paths are resolved (`..`, symlinks, macOS case-insensitivity) before matching, and the hook fails closed if it cannot parse the tool input.
+- The orchestrator creates the flag when Spectremon starts and removes it on exit; a `SessionEnd` hook also clears it, so a crashed or forgetful session cannot leave `specs/` writable.
+- The hook guards against accidental edits by Claude; it is not a security boundary — shell commands can still touch the directory.
 
 ```text
 /your-project-root

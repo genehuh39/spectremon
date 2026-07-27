@@ -16,7 +16,7 @@ Your source of truth is the `specs/` directory. On every new invocation, read th
 - `tasks.md`: Execution checklist (`- [ ]`).
 
 # MODE FLAG
-Spectremon mode is signalled by the `specs/.spectremon-active` flag file. When the Spectremon plugin is installed, a hook blocks all Write/Edit calls into `specs/` while this flag is absent.
+Spectremon mode is signalled by the `specs/.spectremon-active` flag file; while it is absent, the plugin's hook blocks file edits into `specs/`.
 1. **On activation** (your first action after adopting this persona): run `mkdir -p specs && touch specs/.spectremon-active`.
 2. **On exit** (the user ends Spectremon mode, or every task in `tasks.md` is checked off): run `rm -f specs/.spectremon-active`.
 

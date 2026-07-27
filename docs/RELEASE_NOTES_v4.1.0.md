@@ -6,7 +6,7 @@ The framework's rules are now enforced mechanically instead of by prose instruct
 
 ## Changes
 
-- **`specs/` write protection hook**: the plugin ships a `PreToolUse` hook (`hooks/protect-specs.sh`) that blocks Write/Edit calls into `specs/` unless the mode flag `specs/.spectremon-active` exists. The orchestrator skill creates the flag on activation and removes it on exit. The hook guards against accidental edits by Claude; it is not a security boundary (shell commands bypass it).
+- **`specs/` write protection hooks**: file-editing tools are blocked from touching `specs/` outside Spectremon mode, and a `SessionEnd` hook clears the mode flag so a crashed session can't leave the directory unprotected. See the README's *State Management* section for the full contract.
 - **Review-only Architect**: the architect subagent no longer has Write/Edit tools. It approves or rejects with feedback; all fixes route back through the Implementer. Temporary verification scripts are created and cleaned up via Bash. The architect also requests `effort: high` for deeper review reasoning.
 - **Tests**: new tests validate the hook wiring, script executability, and live block/allow behavior against the mode flag, plus the architect's restricted toolset.
 
