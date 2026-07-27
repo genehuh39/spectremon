@@ -382,7 +382,7 @@ return { passed: false, attempts: MAX_ATTEMPTS, blocker: lastFeedback }
 // package.json
 var package_default = {
   name: "spectremon",
-  version: "4.2.0",
+  version: "4.2.1",
   description: "Spec-Driven Development framework for Claude Code",
   type: "module",
   bin: {
