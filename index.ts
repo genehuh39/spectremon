@@ -8,6 +8,7 @@ import discoveryAgent from "./agents/discovery.md" with { type: "text" };
 import implementerAgent from "./agents/implementer.md" with { type: "text" };
 import architectAgent from "./agents/architect.md" with { type: "text" };
 import orchestratorSkill from "./skills/start/SKILL.md" with { type: "text" };
+import executeTaskWorkflow from "./workflows/execute-task.js" with { type: "text" };
 import pkg from "./package.json";
 
 const targetDir = process.cwd();
@@ -271,7 +272,8 @@ const files: Record<string, string> = {
   ".claude/spectremon.md": stripFrontmatter(orchestratorSkill).trim(),
   ".claude/agents/discovery.md": discoveryAgent,
   ".claude/agents/implementer.md": implementerAgent,
-  ".claude/agents/architect.md": architectAgent
+  ".claude/agents/architect.md": architectAgent,
+  ".claude/workflows/execute-task.js": executeTaskWorkflow
 };
 
 console.log("🚀 Initializing Spectremon with Bun...");

@@ -31,9 +31,11 @@ Spectremon mode is signalled by the `specs/.spectremon-active` flag file; while 
 
 ## Phase 3 & 4: Execution & Verification
 1. Read `specs/tasks.md`. Identify the first uncompleted task (`- [ ]`).
-2. **Delegation (Coding):** Delegate to the **spectremon-implementer** subagent with the phase, specific task description, mode, relevant spec paths, and expected completion response.
-3. **Delegation (Review):** Once the Implementer finishes, delegate to a fresh **spectremon-architect** subagent context with the phase, exact task, modified files, relevant spec paths, and expected completion response.
-4. **The Correction Loop:** If the Architect rejects the code, pass the feedback back to the Implementer and repeat.
-5. **Plan Mutation Rule:** If the Implementer fails the Architect's review after 3 consecutive attempts on the same task, HALT implementation. Summarize the roadblock, propose modifications to `design.md` and `tasks.md`, and await user approval before mutating the plan.
-6. **State Update:** You are strictly forbidden from changing a task to `- [x]` in `tasks.md` unless the Architect explicitly replies with "REVIEW PASSED". Once passed, update the markdown file.
-7. **User Check-in:** After checking off a task, briefly report the success and ask for permission to proceed.
+2. **Preferred — workflow execution:** If the Workflow tool is available, run the bundled `spectremon:execute-task` workflow (installed as `execute-task` in installer-based setups) with `args: {description: "<exact task text>"}`. It executes the Implementer → Architect correction loop deterministically with a capped number of attempts and returns `{passed: true, attempts, modifiedFiles, summary}` on success, or `{passed: false, attempts, blocker}` after exhausting them.
+3. **Fallback — manual delegation** (only when the Workflow tool is unavailable, e.g. legacy installer setups):
+   1. Delegate to the **spectremon-implementer** subagent with the phase, specific task description, mode, relevant spec paths, and expected completion response.
+   2. Once the Implementer finishes, delegate to a fresh **spectremon-architect** subagent context with the phase, exact task, modified files, relevant spec paths, and expected completion response.
+   3. If the Architect rejects the code, pass the feedback back to the Implementer and repeat.
+4. **Plan Mutation Rule:** If the workflow reports failure, or the manual fallback accumulates 3 consecutive rejected attempts, HALT implementation. Summarize the roadblock (the returned `blocker`), propose modifications to `design.md` and `tasks.md`, and await user approval before mutating the plan.
+5. **State Update:** You are strictly forbidden from changing a task to `- [x]` in `tasks.md` unless the workflow reported success or, in the manual fallback, the Architect explicitly replied with "REVIEW PASSED". Once passed, update the markdown file.
+6. **User Check-in:** After checking off a task, briefly report the success and ask for permission to proceed.

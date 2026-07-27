@@ -97,6 +97,49 @@ describe("Claude Code plugin", () => {
       expect(skill).toContain(agentName);
     }
     expect(skill).toContain("fresh **spectremon-architect** subagent context");
+    expect(skill).toContain("spectremon:execute-task");
+  });
+
+  test("execute-task workflow drives the implementer → architect loop", async () => {
+    const [, implementerName, architectName] = expectedAgentNames;
+    const script = readFileSync(join(projectRoot, "workflows/execute-task.js"), "utf8");
+    expect(script).toMatch(/name:\s*['"]execute-task['"]/);
+
+    // Workflow scripts execute in an async function context (top-level
+    // await/return), so wrap the body the way the runtime does and run it
+    // against stubbed agent()/log() to exercise the real control flow.
+    const body = script.replace("export const meta", "const meta");
+    type AgentStub = (prompt: string, opts: { agentType: string }) => Promise<unknown>;
+    const run = (agentStub: AgentStub) =>
+      new Function("agent", "log", "args", `return (async () => { ${body} })()`)(
+        agentStub,
+        () => {},
+        { description: "Build the widget" }
+      );
+
+    const agentTypes: string[] = [];
+    const success = await run(async (_prompt, opts) => {
+      agentTypes.push(opts.agentType);
+      return opts.agentType === architectName
+        ? { passed: true, feedback: "all checks passed" }
+        : { modifiedFiles: ["src/widget.ts"], summary: "implemented the widget" };
+    });
+    expect(agentTypes).toEqual([implementerName, architectName]);
+    expect(success).toEqual({
+      passed: true,
+      attempts: 1,
+      modifiedFiles: ["src/widget.ts"],
+      summary: "implemented the widget"
+    });
+
+    let rejections = 0;
+    const failure = await run(async (prompt, opts) => {
+      if (opts.agentType === architectName) return { passed: false, feedback: `rejected ${++rejections}` };
+      // Retries must carry the prior rejection feedback forward.
+      if (rejections > 0) expect(prompt).toContain(`rejected ${rejections}`);
+      return { modifiedFiles: [], summary: "attempted" };
+    });
+    expect(failure).toEqual({ passed: false, attempts: 3, blocker: "rejected 3" });
   });
 
   test("architect agent is review-only (no Write/Edit tools)", () => {
@@ -193,6 +236,7 @@ describe("Claude Code plugin", () => {
     for (const agentName of expectedAgentNames) {
       expect(orchestrator).toContain(agentName);
     }
+    expect(existsSync(join(targetDir, ".claude/workflows/execute-task.js"))).toBe(true);
   });
 
   test("upgrade registers existing agents without replacing their prompt bodies", () => {

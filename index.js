@@ -254,7 +254,7 @@ You deliberately have no Write or Edit tools: you review code, you never modify 
 2. **Security Checks:** Perform a strict security review on the new logic. Look specifically for injection vulnerabilities, improper state management, unvalidated inputs, and insecure data handling.
 3. **Automated Verification:** You must run the relevant unit tests or terminal REPL commands to prove the backend and utility code works. If tests do not exist, write them, run them, and ensure they pass.
 4. **Feedback Loop:** If the code fails your review or the tests fail, provide exact, actionable feedback and error stacks to the Orchestrator to trigger a new implementation attempt.
-5. **Approval:** Once the code passes all checks, reply with "REVIEW PASSED", delete any temporary test files, and summarize the verified behavior.
+5. **Verdict:** Once the code passes all checks, delete any temporary test files and report success with a summary of the verified behavior — as \`passed: true\` when the delegation requests a structured verdict, otherwise by replying "REVIEW PASSED". On failure, report \`passed: false\` (or a rejection) with exact, actionable feedback and error output.
 
 # FRONTEND / REACT VERIFICATION PROTOCOL
 If the task involves building or modifying React components, you cannot rely on visual inspection or assume the code works. You MUST execute a headless render in the terminal to verify logic and structure:
@@ -298,17 +298,91 @@ Spectremon mode is signalled by the \`specs/.spectremon-active\` flag file; whil
 
 ## Phase 3 & 4: Execution & Verification
 1. Read \`specs/tasks.md\`. Identify the first uncompleted task (\`- [ ]\`).
-2. **Delegation (Coding):** Delegate to the **spectremon-implementer** subagent with the phase, specific task description, mode, relevant spec paths, and expected completion response.
-3. **Delegation (Review):** Once the Implementer finishes, delegate to a fresh **spectremon-architect** subagent context with the phase, exact task, modified files, relevant spec paths, and expected completion response.
-4. **The Correction Loop:** If the Architect rejects the code, pass the feedback back to the Implementer and repeat.
-5. **Plan Mutation Rule:** If the Implementer fails the Architect's review after 3 consecutive attempts on the same task, HALT implementation. Summarize the roadblock, propose modifications to \`design.md\` and \`tasks.md\`, and await user approval before mutating the plan.
-6. **State Update:** You are strictly forbidden from changing a task to \`- [x]\` in \`tasks.md\` unless the Architect explicitly replies with "REVIEW PASSED". Once passed, update the markdown file.
-7. **User Check-in:** After checking off a task, briefly report the success and ask for permission to proceed.
+2. **Preferred — workflow execution:** If the Workflow tool is available, run the bundled \`spectremon:execute-task\` workflow (installed as \`execute-task\` in installer-based setups) with \`args: {description: "<exact task text>"}\`. It executes the Implementer → Architect correction loop deterministically with a capped number of attempts and returns \`{passed: true, attempts, modifiedFiles, summary}\` on success, or \`{passed: false, attempts, blocker}\` after exhausting them.
+3. **Fallback — manual delegation** (only when the Workflow tool is unavailable, e.g. legacy installer setups):
+   1. Delegate to the **spectremon-implementer** subagent with the phase, specific task description, mode, relevant spec paths, and expected completion response.
+   2. Once the Implementer finishes, delegate to a fresh **spectremon-architect** subagent context with the phase, exact task, modified files, relevant spec paths, and expected completion response.
+   3. If the Architect rejects the code, pass the feedback back to the Implementer and repeat.
+4. **Plan Mutation Rule:** If the workflow reports failure, or the manual fallback accumulates 3 consecutive rejected attempts, HALT implementation. Summarize the roadblock (the returned \`blocker\`), propose modifications to \`design.md\` and \`tasks.md\`, and await user approval before mutating the plan.
+5. **State Update:** You are strictly forbidden from changing a task to \`- [x]\` in \`tasks.md\` unless the workflow reported success or, in the manual fallback, the Architect explicitly replied with "REVIEW PASSED". Once passed, update the markdown file.
+6. **User Check-in:** After checking off a task, briefly report the success and ask for permission to proceed.
+`;
+
+// workflows/execute-task.js
+var execute_task_default = `export const meta = {
+  name: 'execute-task',
+  description: 'Run one approved Spectremon task through the Implementer → Architect review loop (hard 3-attempt cap)',
+  whenToUse: 'Invoked by the Spectremon orchestrator for each unchecked task in specs/tasks.md. Pass args: {description: "<exact task text>"}.',
+  phases: [
+    { title: 'Implement', detail: 'Implementer executes the approved task' },
+    { title: 'Review', detail: 'Architect independently verifies the change' },
+  ],
+}
+
+if (!args?.description) {
+  throw new Error('args.description is required: pass the exact task text from specs/tasks.md')
+}
+
+const REPORT_SCHEMA = {
+  type: 'object',
+  properties: {
+    modifiedFiles: { type: 'array', items: { type: 'string' } },
+    summary: { type: 'string' },
+  },
+  required: ['modifiedFiles', 'summary'],
+  additionalProperties: false,
+}
+
+const VERDICT_SCHEMA = {
+  type: 'object',
+  properties: {
+    passed: { type: 'boolean' },
+    feedback: { type: 'string' },
+  },
+  required: ['passed', 'feedback'],
+  additionalProperties: false,
+}
+
+const MAX_ATTEMPTS = 3
+
+// Role rules live in the agent definitions (agents/*.md), loaded via
+// agentType — these prompts carry only the per-task delegation context.
+let lastReport = null
+let lastFeedback = ''
+
+for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+  const priorContext = lastReport
+    ? \`\\n\\nYour previous attempt modified: \${lastReport.modifiedFiles.join(', ') || '(no files reported)'} — \${lastReport.summary}\\nThe Architect rejected it with this feedback; address every point:\\n\${lastFeedback}\`
+    : ''
+
+  const report = await agent(
+    \`Act as the Spectremon Implementer for one approved task from specs/tasks.md.\\n\\nTask: \${args.description}\${priorContext}\`,
+    { agentType: 'spectremon-implementer', label: \`implement (attempt \${attempt})\`, phase: 'Implement', schema: REPORT_SCHEMA }
+  )
+  if (!report) throw new Error(\`Implementer returned no report on attempt \${attempt}\`)
+
+  const verdict = await agent(
+    \`Act as the Spectremon Architect: review one completed implementation task against the approved specs in specs/.\\n\\nTask: \${args.description}\\nFiles the Implementer reports modifying: \${report.modifiedFiles.join(', ') || '(none reported)'}\\nImplementer summary: \${report.summary}\\n\\nSet passed=true only if every check your role defines succeeds; otherwise set passed=false with exact, actionable feedback including error output.\`,
+    { agentType: 'spectremon-architect', label: \`review (attempt \${attempt})\`, phase: 'Review', schema: VERDICT_SCHEMA }
+  )
+  if (!verdict) throw new Error(\`Architect returned no verdict on attempt \${attempt}\`)
+
+  if (verdict.passed) {
+    log(\`Task passed review on attempt \${attempt}\`)
+    return { passed: true, attempts: attempt, modifiedFiles: report.modifiedFiles, summary: report.summary }
+  }
+
+  lastReport = report
+  lastFeedback = verdict.feedback
+  log(\`Attempt \${attempt}/\${MAX_ATTEMPTS} rejected by Architect\`)
+}
+
+return { passed: false, attempts: MAX_ATTEMPTS, blocker: lastFeedback }
 `;
 // package.json
 var package_default = {
   name: "spectremon",
-  version: "4.1.0",
+  version: "4.2.0",
   description: "Spec-Driven Development framework for Claude Code",
   type: "module",
   bin: {
@@ -546,7 +620,8 @@ var files = {
   ".claude/spectremon.md": stripFrontmatter(SKILL_default).trim(),
   ".claude/agents/discovery.md": discovery_default,
   ".claude/agents/implementer.md": implementer_default,
-  ".claude/agents/architect.md": architect_default
+  ".claude/agents/architect.md": architect_default,
+  ".claude/workflows/execute-task.js": execute_task_default
 };
 console.log("\uD83D\uDE80 Initializing Spectremon with Bun...");
 try {

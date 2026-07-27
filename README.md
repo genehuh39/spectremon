@@ -188,6 +188,8 @@ The Architect deliberately has no Write or Edit tools — it can only approve or
 
 If the Implementer fails the Architect's review **3 times** on the same task, the Orchestrator halts, summarizes the blocker, and proposes spec changes for your approval before continuing.
 
+This loop ships as a workflow — `spectremon:execute-task` with the plugin, copied to `.claude/workflows/execute-task.js` by the installer — so both setups share one code path. Once invoked, the implement → review → retry cycle, its attempt cap, and the pass/fail gate are enforced by code with structured Architect verdicts instead of prose and string matching. The Orchestrator still checks in with you between tasks, and falls back to prose-driven delegation only where the Workflow tool is unavailable.
+
 ## State Management
 
 All spec state lives in `specs/` at your project root. This directory is treated as read-only outside of Spectremon mode.
