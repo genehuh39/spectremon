@@ -1,0 +1,10 @@
+{
+  "name": "spectremon",
+  "owner": { "name": "genehuh39" },
+  "plugins": [
+    {
+      "name": "spectremon",
+      "source": "./"
+    }
+  ]
+}

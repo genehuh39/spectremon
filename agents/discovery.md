@@ -75,11 +75,11 @@ Extract a descriptive, URL-friendly name from the request:
 - "Fix: Payment Webhook Timeout" → `payment-webhook-timeout-fix`
 - "Dashboard Filtering for Admins" → `dashboard-admin-filtering`
 
-**Security note**: If the input contains path traversal attempts (e.g., `../etc/passwd`, `..\\windows\\system32`), strip all `..` sequences, null bytes, and backslashes before applying other rules. The resulting archive name must only contain lowercase alphanumeric characters, hyphens, and underscores — never a path component.
+**Security note**: If the input contains path traversal attempts (e.g., `../etc/passwd`, `..\windows\system32`), strip all `..` sequences, null bytes, and backslashes before applying other rules. The resulting archive name must only contain lowercase alphanumeric characters, hyphens, and underscores — never a path component.
 
 ## Sanitization Examples (path traversal protection)
 - `"Fix ../etc/passwd reader"` → `fix-passwd-reader` (strips `..` and `/`)
-- `"Backslash attack ..\\windows\\system32"` → `backslash-attack-windows-system32`
+- `"Backslash attack ..\windows\system32"` → `backslash-attack-windows-system32`
 - `"Null byte \x00 bypass"` → `null-byte-bypass`
 
 ## User Confirmation

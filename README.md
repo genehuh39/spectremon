@@ -6,6 +6,23 @@ Spectremon is an on-demand, multi-agent orchestration framework for Claude Code.
 
 ## Installation
 
+### As a Claude Code plugin (recommended)
+
+Spectremon ships as a native Claude Code plugin. Inside Claude Code:
+
+```text
+/plugin marketplace add genehuh39/spectremon
+/plugin install spectremon@spectremon
+```
+
+The plugin registers the three subagents and a `/spectremon:start` skill — no files are written into your project. To try it locally without installing:
+
+```bash
+claude --plugin-dir /path/to/spectremon
+```
+
+### With the legacy installer
+
 Run the installer from your project root. No global install required.
 
 **With npm:**
@@ -51,11 +68,15 @@ Their descriptions restrict automatic routing to work explicitly delegated by th
 
 ## Usage
 
-Once installed, trigger the framework inside Claude Code by saying:
+With the plugin installed, run:
+
+> `/spectremon:start`
+
+With the legacy installer, trigger the framework inside Claude Code by saying:
 
 > "Start Spectremon" or "Boot up the Orchestrator"
 
-Claude will adopt the Orchestrator persona and begin the SDD workflow.
+Either way, Claude adopts the Orchestrator persona and begins the SDD workflow.
 
 ## How It Works
 
