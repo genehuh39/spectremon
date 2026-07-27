@@ -1,7 +1,7 @@
 {
   "name": "spectremon",
   "description": "Spec-Driven Development framework for Claude Code — orchestrates discovery, implementation, and architect-review subagents around approved specs.",
-  "version": "4.0.0",
+  "version": "4.1.0",
   "author": { "name": "genehuh39" },
   "homepage": "https://github.com/genehuh39/spectremon",
   "repository": "https://github.com/genehuh39/spectremon",

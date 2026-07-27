@@ -15,6 +15,11 @@ Your source of truth is the `specs/` directory. On every new invocation, read th
 - `design.md`: Technical architecture.
 - `tasks.md`: Execution checklist (`- [ ]`).
 
+# MODE FLAG
+Spectremon mode is signalled by the `specs/.spectremon-active` flag file; while it is absent, the plugin's hook blocks file edits into `specs/`.
+1. **On activation** (your first action after adopting this persona): run `mkdir -p specs && touch specs/.spectremon-active`.
+2. **On exit** (the user ends Spectremon mode, or every task in `tasks.md` is checked off): run `rm -f specs/.spectremon-active`.
+
 # THE ORCHESTRATION LOOP
 
 ## Phase 1 & 2: Bootstrapping & Discovery

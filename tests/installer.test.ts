@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -97,6 +97,68 @@ describe("Claude Code plugin", () => {
       expect(skill).toContain(agentName);
     }
     expect(skill).toContain("fresh **spectremon-architect** subagent context");
+  });
+
+  test("architect agent is review-only (no Write/Edit tools)", () => {
+    const architect = readAgentDefinition(join(projectRoot, "agents/architect.md"));
+    expect(architect.tools).not.toContain('"Write"');
+    expect(architect.tools).not.toContain('"Edit"');
+    expect(architect.tools).toContain('"Bash"');
+  });
+
+  test("specs protection hooks are wired and executable", () => {
+    const hooks = JSON.parse(readFileSync(join(projectRoot, "hooks/hooks.json"), "utf8"));
+    const [preToolUse] = hooks.hooks.PreToolUse;
+    expect(preToolUse.matcher).toBe("Write|Edit|NotebookEdit");
+    expect(preToolUse.hooks[0].command).toBe("${CLAUDE_PLUGIN_ROOT}/hooks/protect-specs.sh");
+    const [sessionEnd] = hooks.hooks.SessionEnd;
+    expect(sessionEnd.hooks[0].command).toBe("${CLAUDE_PLUGIN_ROOT}/hooks/deactivate-specs.sh");
+    for (const script of ["protect-specs.sh", "deactivate-specs.sh"]) {
+      expect(statSync(join(projectRoot, "hooks", script)).mode & 0o111).toBeTruthy();
+    }
+  });
+
+  test("specs protection hook blocks and allows edits based on the mode flag", () => {
+    const targetDir = mkdtempSync(join(tmpdir(), "spectremon-hook-test-"));
+    temporaryDirectories.push(targetDir);
+    const runHook = (toolInput: Record<string, string>) =>
+      Bun.spawnSync({
+        cmd: [join(projectRoot, "hooks/protect-specs.sh")],
+        cwd: targetDir,
+        env: { ...process.env, CLAUDE_PROJECT_DIR: targetDir },
+        stdin: Buffer.from(JSON.stringify({ tool_name: "Write", tool_input: toolInput })),
+        stdout: "pipe",
+        stderr: "pipe"
+      });
+
+    expect(runHook({ file_path: join(targetDir, "src/app.ts") }).exitCode).toBe(0);
+    expect(runHook({ file_path: join(targetDir, "src/app.ts"), content: "prose mentioning specs/" }).exitCode).toBe(0);
+    expect(runHook({ file_path: join(targetDir, "specs/tasks.md") }).exitCode).toBe(2);
+    expect(runHook({ file_path: "specs/tasks.md" }).exitCode).toBe(2);
+    expect(runHook({ file_path: join(targetDir, "src/../specs/tasks.md") }).exitCode).toBe(2);
+    expect(runHook({ notebook_path: join(targetDir, "specs/analysis.ipynb") }).exitCode).toBe(2);
+
+    mkdirSync(join(targetDir, "specs"), { recursive: true });
+    writeFileSync(join(targetDir, "specs/.spectremon-active"), "");
+    expect(runHook({ file_path: join(targetDir, "specs/tasks.md") }).exitCode).toBe(0);
+  });
+
+  test("session-end hook removes the mode flag", () => {
+    const targetDir = mkdtempSync(join(tmpdir(), "spectremon-hook-test-"));
+    temporaryDirectories.push(targetDir);
+    const flagPath = join(targetDir, "specs/.spectremon-active");
+    mkdirSync(join(targetDir, "specs"), { recursive: true });
+    writeFileSync(flagPath, "");
+
+    const result = Bun.spawnSync({
+      cmd: [join(projectRoot, "hooks/deactivate-specs.sh")],
+      env: { ...process.env, CLAUDE_PROJECT_DIR: targetDir },
+      stdout: "pipe",
+      stderr: "pipe"
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(existsSync(flagPath)).toBe(false);
   });
 
   test("plugin and marketplace manifests are valid", () => {
