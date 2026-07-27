@@ -89,9 +89,10 @@ describe("Claude Code plugin", () => {
     expectValidAgents(projectRoot, pluginAgentPaths);
 
     const skill = readFileSync(join(projectRoot, "skills/start/SKILL.md"), "utf8");
-    expect(skill).toMatch(/^---\n[\s\S]*?\n---\n/);
-    expect(skill).toContain("name: start");
-    expect(skill).toContain("description:");
+    const skillFrontmatter = skill.match(/^---\n([\s\S]*?)\n---\n/)?.[1];
+    if (!skillFrontmatter) throw new Error("SKILL.md is missing frontmatter");
+    expect(skillFrontmatter).toMatch(/^name: start$/m);
+    expect(skillFrontmatter).toMatch(/^description:/m);
     for (const agentName of expectedAgentNames) {
       expect(skill).toContain(agentName);
     }
@@ -100,9 +101,10 @@ describe("Claude Code plugin", () => {
 
   test("plugin and marketplace manifests are valid", () => {
     const manifest = JSON.parse(readFileSync(join(projectRoot, ".claude-plugin/plugin.json"), "utf8"));
+    const pkg = JSON.parse(readFileSync(join(projectRoot, "package.json"), "utf8"));
     expect(manifest.name).toBe("spectremon");
     expect(manifest.description.length).toBeGreaterThan(10);
-    expect(manifest.version).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(manifest.version).toBe(pkg.version);
 
     const marketplace = JSON.parse(readFileSync(join(projectRoot, ".claude-plugin/marketplace.json"), "utf8"));
     expect(marketplace.name).toBe("spectremon");

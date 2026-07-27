@@ -8,9 +8,10 @@ import discoveryAgent from "./agents/discovery.md" with { type: "text" };
 import implementerAgent from "./agents/implementer.md" with { type: "text" };
 import architectAgent from "./agents/architect.md" with { type: "text" };
 import orchestratorSkill from "./skills/start/SKILL.md" with { type: "text" };
+import pkg from "./package.json";
 
 const targetDir = process.cwd();
-const CLAUDE_MD_VERSION = "v4.0.0";
+const CLAUDE_MD_VERSION = `v${pkg.version}`;
 const SPECTREMON_SECTION_START = "# CUSTOM WORKFLOWS & TRIGGERS";
 const SPECTREMON_SECTION_END = "Treat the `specs/` directory as read-only unless Spectremon mode is active.";
 const LEGACY_SPECTREMON_HEADING = "## The Spectremon SDD Framework";
@@ -79,12 +80,18 @@ function safeReadFile(filePath: string): string {
   }
 }
 
-function extractAgentFrontmatter(content: string): string {
-  const match = content.match(/^---\n[\s\S]*?\n---\n/);
+const FRONTMATTER_PATTERN = /^---\r?\n[\s\S]*?\r?\n---\r?\n/;
+
+function extractFrontmatter(content: string): string {
+  const match = content.match(FRONTMATTER_PATTERN);
   if (!match) {
-    throw new Error("Bundled agent definition is missing required YAML frontmatter.");
+    throw new Error("Bundled definition is missing required YAML frontmatter.");
   }
   return match[0];
+}
+
+function stripFrontmatter(content: string): string {
+  return content.slice(extractFrontmatter(content).length);
 }
 
 function migrateOrchestratorDelegation(content: string): string {
@@ -119,7 +126,7 @@ function safeWriteAgentFile(filePath: string, content: string): void {
 
   const existingContent = safeReadFile(filePath);
   if (filePath.startsWith(".claude/agents/") && !/^---\r?\n/.test(existingContent)) {
-    safeWriteFile(filePath, `${extractAgentFrontmatter(content)}\n${existingContent}`);
+    safeWriteFile(filePath, `${extractFrontmatter(content)}\n${existingContent}`);
     console.log(`✅ Registered existing agent: ${filePath} (prompt content preserved)`);
     return;
   }
@@ -260,14 +267,6 @@ const dirs = [
 ];
 
 // --- 2. FILE CONTENTS (sourced from the plugin files at build time) ---
-function stripFrontmatter(content: string): string {
-  const stripped = content.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n+/, "");
-  if (stripped === content) {
-    throw new Error("Bundled skill definition is missing required YAML frontmatter.");
-  }
-  return stripped;
-}
-
 const files: Record<string, string> = {
   ".claude/spectremon.md": stripFrontmatter(orchestratorSkill).trim(),
   ".claude/agents/discovery.md": discoveryAgent,

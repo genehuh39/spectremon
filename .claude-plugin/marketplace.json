@@ -4,8 +4,7 @@
   "plugins": [
     {
       "name": "spectremon",
-      "source": "./",
-      "description": "Spec-Driven Development framework for Claude Code — orchestrates discovery, implementation, and architect-review subagents around approved specs."
+      "source": "./"
     }
   ]
 }

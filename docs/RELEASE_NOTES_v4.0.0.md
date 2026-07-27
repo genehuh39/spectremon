@@ -14,5 +14,7 @@ Spectremon is now a native **Claude Code plugin**. The repository root is the pl
 
 ## Upgrade notes
 
+- The repo previously tracked expanded local variants of `architect.md` and `implementer.md` under `.claude/agents/` that diverged from what the installer actually shipped. The plugin adopts the installer-shipped content as canonical; the expanded variants were dropped (recoverable from git history at `main:.claude/agents/`).
+
 - Existing installer-based setups keep working; re-running the installer refreshes the CLAUDE.md section to v4.0.0 and leaves locally modified agent files intact, as before.
 - Plugin and installer modes can coexist, but pick one per project to avoid registering duplicate subagents.

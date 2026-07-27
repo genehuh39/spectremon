@@ -297,10 +297,34 @@ Your source of truth is the \`specs/\` directory. On every new invocation, read 
 6. **State Update:** You are strictly forbidden from changing a task to \`- [x]\` in \`tasks.md\` unless the Architect explicitly replies with "REVIEW PASSED". Once passed, update the markdown file.
 7. **User Check-in:** After checking off a task, briefly report the success and ask for permission to proceed.
 `;
+// package.json
+var package_default = {
+  name: "spectremon",
+  version: "4.0.0",
+  description: "Spec-Driven Development framework for Claude Code",
+  type: "module",
+  bin: {
+    spectremon: "./index.js"
+  },
+  files: [
+    "index.js"
+  ],
+  scripts: {
+    build: "bun build ./index.ts --outfile ./index.js --target node && sed -i '' '1s|.*|#!/usr/bin/env node|' ./index.js",
+    prepublishOnly: "bun run build",
+    test: "bun run build && bun test",
+    typecheck: "bunx tsc --noEmit"
+  },
+  author: "genehuh39",
+  license: "MIT",
+  devDependencies: {
+    "bun-types": "latest"
+  }
+};
 
 // index.ts
 var targetDir = process.cwd();
-var CLAUDE_MD_VERSION = "v4.0.0";
+var CLAUDE_MD_VERSION = `v${package_default.version}`;
 var SPECTREMON_SECTION_START = "# CUSTOM WORKFLOWS & TRIGGERS";
 var SPECTREMON_SECTION_END = "Treat the `specs/` directory as read-only unless Spectremon mode is active.";
 var LEGACY_SPECTREMON_HEADING = "## The Spectremon SDD Framework";
@@ -363,12 +387,16 @@ ${message}
 ` + "Check that the file exists and is readable.");
   }
 }
-function extractAgentFrontmatter(content) {
-  const match = content.match(/^---\n[\s\S]*?\n---\n/);
+var FRONTMATTER_PATTERN = /^---\r?\n[\s\S]*?\r?\n---\r?\n/;
+function extractFrontmatter(content) {
+  const match = content.match(FRONTMATTER_PATTERN);
   if (!match) {
-    throw new Error("Bundled agent definition is missing required YAML frontmatter.");
+    throw new Error("Bundled definition is missing required YAML frontmatter.");
   }
   return match[0];
+}
+function stripFrontmatter(content) {
+  return content.slice(extractFrontmatter(content).length);
 }
 function migrateOrchestratorDelegation(content) {
   return content.replaceAll("Invoke the **Discovery** subagent (`.claude/agents/discovery.md`)", "Delegate to the **spectremon-discovery** subagent").replaceAll("Invoke the **Implementer** subagent (`.claude/agents/implementer.md`)", "Delegate to the **spectremon-implementer** subagent").replaceAll("invoke the **Architect** subagent (`.claude/agents/architect.md`)", "delegate to a fresh **spectremon-architect** subagent context").replaceAll("invoke the **Senior Software Architect** subagent (`.claude/agents/architect.md`)", "delegate to a fresh **spectremon-architect** subagent context");
@@ -382,7 +410,7 @@ function safeWriteAgentFile(filePath, content) {
   }
   const existingContent = safeReadFile(filePath);
   if (filePath.startsWith(".claude/agents/") && !/^---\r?\n/.test(existingContent)) {
-    safeWriteFile(filePath, `${extractAgentFrontmatter(content)}
+    safeWriteFile(filePath, `${extractFrontmatter(content)}
 ${existingContent}`);
     console.log(`\u2705 Registered existing agent: ${filePath} (prompt content preserved)`);
     return;
@@ -506,13 +534,6 @@ var dirs = [
   join(targetDir, ".claude"),
   join(targetDir, ".claude", "agents")
 ];
-function stripFrontmatter(content) {
-  const stripped = content.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n+/, "");
-  if (stripped === content) {
-    throw new Error("Bundled skill definition is missing required YAML frontmatter.");
-  }
-  return stripped;
-}
 var files = {
   ".claude/spectremon.md": stripFrontmatter(SKILL_default).trim(),
   ".claude/agents/discovery.md": discovery_default,
