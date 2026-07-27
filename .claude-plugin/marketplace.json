@@ -1,0 +1,11 @@
+{
+  "name": "spectremon",
+  "owner": { "name": "genehuh39" },
+  "plugins": [
+    {
+      "name": "spectremon",
+      "source": "./",
+      "description": "Spec-Driven Development framework for Claude Code — orchestrates discovery, implementation, and architect-review subagents around approved specs."
+    }
+  ]
+}

@@ -10,6 +10,11 @@ const agentPaths = [
   ".claude/agents/implementer.md",
   ".claude/agents/architect.md"
 ];
+const pluginAgentPaths = [
+  "agents/discovery.md",
+  "agents/implementer.md",
+  "agents/architect.md"
+];
 const expectedAgentNames = [
   "spectremon-discovery",
   "spectremon-implementer",
@@ -56,8 +61,8 @@ function readAgentDefinition(filePath: string): AgentDefinition {
   };
 }
 
-function expectValidAgents(root: string): void {
-  const definitions = agentPaths.map(path => readAgentDefinition(join(root, path)));
+function expectValidAgents(root: string, paths: string[] = agentPaths): void {
+  const definitions = paths.map(path => readAgentDefinition(join(root, path)));
 
   expect(definitions.map(definition => definition.name)).toEqual(expectedAgentNames);
   expect(new Set(definitions.map(definition => definition.name)).size).toBe(definitions.length);
@@ -79,15 +84,31 @@ afterEach(() => {
   }
 });
 
-describe("Claude Code subagents", () => {
-  test("tracked agent definitions are valid and explicitly referenced", () => {
-    expectValidAgents(projectRoot);
+describe("Claude Code plugin", () => {
+  test("bundled agent definitions are valid and explicitly referenced by the skill", () => {
+    expectValidAgents(projectRoot, pluginAgentPaths);
 
-    const orchestrator = readFileSync(join(projectRoot, ".claude/spectremon.md"), "utf8");
+    const skill = readFileSync(join(projectRoot, "skills/start/SKILL.md"), "utf8");
+    expect(skill).toMatch(/^---\n[\s\S]*?\n---\n/);
+    expect(skill).toContain("name: start");
+    expect(skill).toContain("description:");
     for (const agentName of expectedAgentNames) {
-      expect(orchestrator).toContain(agentName);
+      expect(skill).toContain(agentName);
     }
-    expect(orchestrator).toContain("fresh **spectremon-architect** subagent context");
+    expect(skill).toContain("fresh **spectremon-architect** subagent context");
+  });
+
+  test("plugin and marketplace manifests are valid", () => {
+    const manifest = JSON.parse(readFileSync(join(projectRoot, ".claude-plugin/plugin.json"), "utf8"));
+    expect(manifest.name).toBe("spectremon");
+    expect(manifest.description.length).toBeGreaterThan(10);
+    expect(manifest.version).toMatch(/^\d+\.\d+\.\d+$/);
+
+    const marketplace = JSON.parse(readFileSync(join(projectRoot, ".claude-plugin/marketplace.json"), "utf8"));
+    expect(marketplace.name).toBe("spectremon");
+    expect(marketplace.plugins).toEqual([
+      expect.objectContaining({ name: "spectremon", source: "./" })
+    ]);
   });
 
   test("fresh installation produces valid registered subagents", () => {
