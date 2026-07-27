@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "server",
+  "dolt_database": "spectremon",
+  "project_id": "de182d75-fb24-4343-b099-e4fe886abd87"
+}
